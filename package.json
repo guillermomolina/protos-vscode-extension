@@ -1,0 +1,108 @@
+{
+  "name": "protos",
+  "displayName": "Protos",
+  "description": "Language support for the Protos programming language.",
+  "icon": "icon.png",
+  "version": "0.1.0",
+  "publisher": "guillermomolina",
+  "license": "APL-1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guillermomolina/protos-vscode-extension.git"
+  },
+  "bugs": {
+    "url": "https://github.com/guillermomolina/protos-vscode-extension/issues"
+  },
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [{
+      "id": "protos",
+      "aliases": ["Protos"],
+      "extensions": [".protos"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "protos",
+      "scopeName": "source.protos",
+      "path": "./syntaxes/protos.tmLanguage.json"
+    }],
+    "commands": [{
+      "command": "protos.runCurrentFile",
+      "title": "Run Current File",
+      "category": "Protos",
+      "enablement": "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && isWorkspaceTrusted"
+    }],
+    "menus": {
+      "commandPalette": [{
+        "command": "protos.runCurrentFile",
+        "when": "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && isWorkspaceTrusted"
+      }]
+    },
+    "configuration": {
+      "title": "Protos",
+      "properties": {
+        "protos.runtime.executable": {
+          "type": "string",
+          "default": "protos",
+          "scope": "machine",
+          "description": "Protos launcher executable used by Run Current File, debugging, and the static language server. Defaults to 'protos' resolved through PATH."
+        }
+      }
+    },
+    "breakpoints": [{"language": "protos"}],
+    "debuggers": [{
+      "type": "protos",
+      "label": "Protos",
+      "languages": ["protos"],
+      "configurationAttributes": {
+        "launch": {
+          "required": ["program"],
+          "properties": {
+            "program": {
+              "type": "string",
+              "description": "Absolute Protos source-file path to debug after VS Code variable substitution."
+            },
+            "args": {
+              "type": "array",
+              "items": {"type": "string"},
+              "default": [],
+              "description": "Application arguments passed after the Protos source file."
+            }
+          }
+        }
+      },
+      "initialConfigurations": [{
+        "type": "protos",
+        "request": "launch",
+        "name": "Debug Protos File",
+        "program": "${file}",
+        "args": []
+      }]
+    }]
+  },
+  "dependencies": {"vscode-languageclient": "10.1.1"},
+  "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "restrictedConfigurations": ["protos.runtime.executable"]
+    }
+  },
+  "extensionKind": ["workspace"],
+  "scripts": {
+    "build": "esbuild extension.js --bundle --platform=node --format=cjs --target=node22 --external:vscode --metafile=dist/meta.json --outfile=dist/extension.js",
+    "package:assets": "node scripts/sync_package_assets.js --check",
+    "vscode:prepublish": "npm run build && npm run package:assets",
+    "package:vsix": "vsce package --no-dependencies",
+    "package:vsix:canonical": "node scripts/canonicalize_vsix.js"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.2",
+    "yauzl": "^3.4.0",
+    "yazl": "^2.5.1"
+  }
+}
