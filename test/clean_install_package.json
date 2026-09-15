@@ -1,0 +1,11 @@
+{
+  "name": "protos-clean-install-harness",
+  "displayName": "Protos Clean Install Harness",
+  "version": "0.0.0",
+  "publisher": "protos-ci",
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": ["*"]
+}

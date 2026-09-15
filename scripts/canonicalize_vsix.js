@@ -24,11 +24,18 @@ const input = path.resolve(process.argv[2]);
 const output = path.resolve(process.argv[3]);
 const epoch = Number(process.argv[4]);
 
-if (!Number.isInteger(epoch) || epoch < 0) fail("source_date_epoch must be a non-negative integer");
+if (!Number.isInteger(epoch) || epoch < 0) {
+  fail("source_date_epoch must be a non-negative integer");
+}
 
 function safeName(name) {
   const normalized = name.replace(/\\/g, "/");
-  if (!normalized || normalized.startsWith("/") || normalized.includes("\0") || normalized.split("/").some((part) => part === "..")) {
+  if (
+    !normalized ||
+    normalized.startsWith("/") ||
+    normalized.includes("\0") ||
+    normalized.split("/").some((part) => part === "..")
+  ) {
     fail("unsafe ZIP member path: " + name);
   }
   return normalized;
@@ -36,7 +43,11 @@ function safeName(name) {
 
 function openZip(filename) {
   return new Promise((resolve, reject) => {
-    yauzl.open(filename, { lazyEntries: true, autoClose: true }, (error, zipfile) => (error ? reject(error) : resolve(zipfile)));
+    yauzl.open(
+      filename,
+      { lazyEntries: true, autoClose: true },
+      (error, zipfile) => (error ? reject(error) : resolve(zipfile))
+    );
   });
 }
 
@@ -56,55 +67,103 @@ async function readEntries(filename) {
 
   return new Promise((resolve, reject) => {
     let settled = false;
+
     const failOnce = (error) => {
       if (!settled) {
         settled = true;
-        try { zipfile.close(); } catch (_) {}
+        try {
+          zipfile.close();
+        } catch (_) {
+          // best effort
+        }
         reject(error);
       }
     };
+
     zipfile.on("error", failOnce);
+
     zipfile.on("end", () => {
       if (!settled) {
         settled = true;
         resolve(entries);
       }
     });
+
     zipfile.on("entry", (entry) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
+
       let name;
-      try { name = safeName(entry.fileName); } catch (error) { failOnce(error); return; }
-      if (seen.has(name)) { failOnce(new Error("duplicate ZIP member: " + name)); return; }
+      try {
+        name = safeName(entry.fileName);
+      } catch (error) {
+        failOnce(error);
+        return;
+      }
+
+      if (seen.has(name)) {
+        failOnce(new Error("duplicate ZIP member: " + name));
+        return;
+      }
       seen.add(name);
+
       zipfile.openReadStream(entry, async (error, stream) => {
-        if (error) { failOnce(error); return; }
+        if (error) {
+          failOnce(error);
+          return;
+        }
+
         try {
-          entries.push({ name, data: await readAll(stream), isDirectory: name.endsWith("/") });
+          entries.push({
+            name,
+            data: await readAll(stream),
+            isDirectory: name.endsWith("/"),
+          });
           zipfile.readEntry();
-        } catch (readError) { failOnce(readError); }
+        } catch (readError) {
+          failOnce(readError);
+        }
       });
     });
+
     zipfile.readEntry();
   });
 }
 
 function zipTimestamp(epochSeconds) {
   const minimumEpoch = Date.UTC(1980, 0, 1) / 1000;
-  return new Date(Math.max(epochSeconds, minimumEpoch) * 1000);
+  const clampedEpoch = Math.max(epochSeconds, minimumEpoch);
+  return new Date(clampedEpoch * 1000);
 }
 
 function writeCanonical(filename, entries, mtime) {
   return new Promise((resolve, reject) => {
     const zip = new yazl.ZipFile();
     const outputStream = fs.createWriteStream(filename);
-    const ordered = entries.slice().sort((left, right) => Buffer.compare(Buffer.from(left.name, "utf8"), Buffer.from(right.name, "utf8")));
+
+    const ordered = entries.slice().sort((left, right) =>
+      Buffer.compare(
+        Buffer.from(left.name, "utf8"),
+        Buffer.from(right.name, "utf8")
+      )
+    );
+
     for (const entry of ordered) {
       if (entry.isDirectory) {
-        zip.addEmptyDirectory(entry.name, { mtime, mode: 0o40755 });
+        zip.addEmptyDirectory(entry.name, {
+          mtime,
+          mode: 0o40755,
+        });
       } else {
-        zip.addBuffer(entry.data, entry.name, { mtime, mode: 0o100644, compress: false });
+        zip.addBuffer(entry.data, entry.name, {
+          mtime,
+          mode: 0o100644,
+          compress: false,
+        });
       }
     }
+
     outputStream.on("error", reject);
     outputStream.on("close", resolve);
     zip.outputStream.pipe(outputStream);
@@ -113,11 +172,19 @@ function writeCanonical(filename, entries, mtime) {
 }
 
 (async () => {
-  if (!fs.existsSync(input)) fail("input VSIX does not exist: " + input);
+  if (!fs.existsSync(input)) {
+    fail("input VSIX does not exist: " + input);
+  }
+
   fs.mkdirSync(path.dirname(output), { recursive: true });
+
   const entries = await readEntries(input);
-  if (entries.length === 0) fail("input VSIX contains no ZIP members");
+  if (entries.length === 0) {
+    fail("input VSIX contains no ZIP members");
+  }
+
   await writeCanonical(output, entries, zipTimestamp(epoch));
+
   console.log("LM009_I1C_CANONICALIZATION=PASS");
   console.log("VSIX_CANONICAL_TIMESTAMP_SOURCE=SOURCE_DATE_EPOCH_FROM_GIT_COMMIT");
   console.log("VSIX_CANONICAL_COMPRESSION=STORE");

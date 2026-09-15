@@ -16,30 +16,44 @@
   "engines": {
     "vscode": "^1.104.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": [
+    "Programming Languages"
+  ],
   "contributes": {
-    "languages": [{
-      "id": "protos",
-      "aliases": ["Protos"],
-      "extensions": [".protos"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "protos",
-      "scopeName": "source.protos",
-      "path": "./syntaxes/protos.tmLanguage.json"
-    }],
-    "commands": [{
-      "command": "protos.runCurrentFile",
-      "title": "Run Current File",
-      "category": "Protos",
-      "enablement": "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && isWorkspaceTrusted"
-    }],
-    "menus": {
-      "commandPalette": [{
+    "languages": [
+      {
+        "id": "protos",
+        "aliases": [
+          "Protos"
+        ],
+        "extensions": [
+          ".protos"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "protos",
+        "scopeName": "source.protos",
+        "path": "./syntaxes/protos.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
         "command": "protos.runCurrentFile",
-        "when": "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && isWorkspaceTrusted"
-      }]
+        "title": "Run Current File",
+        "category": "Protos",
+        "enablement": "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && isWorkspaceTrusted"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "protos.runCurrentFile",
+          "when": "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && isWorkspaceTrusted"
+        }
+      ]
     },
     "configuration": {
       "title": "Protos",
@@ -52,46 +66,66 @@
         }
       }
     },
-    "breakpoints": [{"language": "protos"}],
-    "debuggers": [{
-      "type": "protos",
-      "label": "Protos",
-      "languages": ["protos"],
-      "configurationAttributes": {
-        "launch": {
-          "required": ["program"],
-          "properties": {
-            "program": {
-              "type": "string",
-              "description": "Absolute Protos source-file path to debug after VS Code variable substitution."
-            },
-            "args": {
-              "type": "array",
-              "items": {"type": "string"},
-              "default": [],
-              "description": "Application arguments passed after the Protos source file."
+    "breakpoints": [
+      {
+        "language": "protos"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "protos",
+        "label": "Protos",
+        "languages": [
+          "protos"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute Protos source-file path to debug after VS Code variable substitution."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": [],
+                "description": "Application arguments passed after the Protos source file."
+              }
             }
           }
-        }
-      },
-      "initialConfigurations": [{
-        "type": "protos",
-        "request": "launch",
-        "name": "Debug Protos File",
-        "program": "${file}",
-        "args": []
-      }]
-    }]
+        },
+        "initialConfigurations": [
+          {
+            "type": "protos",
+            "request": "launch",
+            "name": "Debug Protos File",
+            "program": "${file}",
+            "args": []
+          }
+        ]
+      }
+    ]
   },
-  "dependencies": {"vscode-languageclient": "10.1.1"},
+  "dependencies": {
+    "vscode-languageclient": "10.1.1"
+  },
   "main": "./dist/extension.js",
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "restrictedConfigurations": ["protos.runtime.executable"]
+      "restrictedConfigurations": [
+        "protos.runtime.executable"
+      ]
     }
   },
-  "extensionKind": ["workspace"],
+  "extensionKind": [
+    "workspace"
+  ],
   "scripts": {
     "build": "esbuild extension.js --bundle --platform=node --format=cjs --target=node22 --external:vscode --metafile=dist/meta.json --outfile=dist/extension.js",
     "package:assets": "node scripts/sync_package_assets.js --check",

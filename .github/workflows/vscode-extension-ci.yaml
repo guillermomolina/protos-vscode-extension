@@ -1,0 +1,473 @@
+name: VS Code extension CI
+
+on:
+  workflow_dispatch:
+
+  push:
+    paths:
+      - "**"
+      - "!node_modules/**"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  package:
+    name: Build canonical VSIX artifact
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout extension repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate canonicalizer
+        run: node --check scripts/canonicalize_vsix.js
+
+      - name: Build production extension
+        run: npm run vscode:prepublish
+
+      - name: Package raw VSIX
+        run: npm exec --yes vsce -- package --no-dependencies --out raw.vsix
+
+      - name: Validate VSIX content
+        run: python3 test/validate_vsix.py raw.vsix
+
+      - name: Derive SOURCE_DATE_EPOCH
+        id: source-date
+        shell: bash
+        run: |
+          echo "epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Canonicalize VSIX
+        run: |
+          node scripts/canonicalize_vsix.js \
+            raw.vsix \
+            protos-vscode.vsix \
+            "${{ steps.source-date.outputs.epoch }}"
+
+      - name: Prove reproducibility
+        run: python3 test/validate_reproducibility.py raw.vsix
+
+      - name: Verify canonical artifact
+        shell: bash
+        run: |
+          sha256sum protos-vscode.vsix | tee protos-vscode.vsix.sha256
+
+      - name: Upload canonical VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: protos-vscode-vsix-${{ github.sha }}
+          path: |
+            protos-vscode.vsix
+            protos-vscode.vsix.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  clean-install:
+    name: Install canonical VSIX in clean VS Code profile
+    needs: package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout extension repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Download canonical VSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: protos-vscode-vsix-${{ github.sha }}
+          path: ci-artifact
+
+      - name: Verify artifact digest
+        working-directory: ci-artifact
+        run: sha256sum --check protos-vscode.vsix.sha256
+
+      - name: Install VS Code
+        shell: bash
+        run: |
+          wget -qO /tmp/code.deb \
+            https://update.code.visualstudio.com/latest/linux-deb-x64/stable
+
+          sudo apt-get update
+          sudo apt-get install -y /tmp/code.deb
+
+      - name: Build CI-only clean-install harness VSIX
+        run: |
+          python3 test/clean_install_make_vsix.py \
+            "$GITHUB_WORKSPACE/harness.vsix"
+
+      - name: Install Protos VSIX into isolated profile
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/i3a"
+
+          mkdir -p \
+            "$RUNNER_TEMP/i3a/extensions" \
+            "$RUNNER_TEMP/i3a/user-data"
+
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --install-extension ci-artifact/protos-vscode.vsix \
+            --force
+
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --install-extension harness.vsix \
+            --force
+
+      - name: Verify installed Protos extension
+        shell: bash
+        run: |
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --list-extensions \
+            --show-versions \
+            | tee "$RUNNER_TEMP/i3a/installed.txt"
+
+          grep -q '^guillermomolina.protos@' \
+            "$RUNNER_TEMP/i3a/installed.txt"
+
+      - name: Exercise installed packaged extension
+        shell: bash
+        env:
+          PROTOS_I3_RESULT: ${{ runner.temp }}/i3a/result.json
+          PROTOS_I3_FIXTURE: ${{ runner.temp }}/i3a/fixture.protos
+        run: |
+          printf 'print("clean-install")\n' > "$PROTOS_I3_FIXTURE"
+
+          nohup code \
+            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --disable-gpu \
+            "$PROTOS_I3_FIXTURE" \
+            >/tmp/protos-i3a-code.log 2>&1 &
+
+          CODE_PID=$!
+
+          for _ in $(seq 1 60); do
+            test -f "$PROTOS_I3_RESULT" && break
+            sleep 1
+          done
+
+          if [ ! -f "$PROTOS_I3_RESULT" ]; then
+            cat /tmp/protos-i3a-code.log || true
+            kill "$CODE_PID" >/dev/null 2>&1 || true
+            echo "VS_CODE_CLEAN_INSTALL_FAILED: harness produced no result"
+            exit 1
+          fi
+
+          python3 \
+            test/clean_install_validate.py \
+            "$PROTOS_I3_RESULT"
+
+          kill "$CODE_PID" >/dev/null 2>&1 || true
+
+  real-run:
+    name: Run Protos from installed VSIX
+    needs: clean-install
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout extension repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Read locked Protos revision
+        id: protos-lock
+        shell: bash
+        run: |
+          revision=$(node -e '
+            const fs = require("fs");
+            const lock = JSON.parse(fs.readFileSync("protos-source.lock.json", "utf8"));
+            if (lock.repository !== "guillermomolina/protos") {
+              throw new Error(`Unexpected Protos repository: ${lock.repository}`);
+            }
+            if (!/^[0-9a-f]{40}$/.test(lock.revision)) {
+              throw new Error(`Invalid Protos revision: ${lock.revision}`);
+            }
+            process.stdout.write(lock.revision);
+          ')
+
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout locked Protos source
+        uses: actions/checkout@v5
+        with:
+          repository: guillermomolina/protos
+          ref: ${{ steps.protos-lock.outputs.revision }}
+          path: protos-source
+          fetch-depth: 1
+
+      - name: Verify locked Protos revision
+        working-directory: protos-source
+        shell: bash
+        run: |
+          actual=$(git rev-parse HEAD)
+          expected="${{ steps.protos-lock.outputs.revision }}"
+
+          test "$actual" = "$expected" || {
+            echo "PROTOS_SOURCE_REVISION_MISMATCH: expected=$expected actual=$actual"
+            exit 1
+          }
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Build locked Protos runtime
+        working-directory: protos-source
+        run: mvn -q -DskipTests package
+
+      - name: Download canonical VSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: protos-vscode-vsix-${{ github.sha }}
+          path: ci-artifact
+
+      - name: Verify artifact digest
+        working-directory: ci-artifact
+        run: sha256sum --check protos-vscode.vsix.sha256
+
+      - name: Install VS Code and Xvfb
+        shell: bash
+        run: |
+          wget -qO /tmp/code.deb \
+            https://update.code.visualstudio.com/latest/linux-deb-x64/stable
+
+          sudo apt-get update
+          sudo apt-get install -y /tmp/code.deb xvfb
+
+      - name: Build real-run harness VSIX
+        run: |
+          python3 test/clean_run_make_vsix.py \
+            "$GITHUB_WORKSPACE/harness.vsix"
+
+      - name: Install packaged Protos extension and harness
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/i3b"
+
+          mkdir -p \
+            "$RUNNER_TEMP/i3b/extensions" \
+            "$RUNNER_TEMP/i3b/user-data"
+
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3b/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3b/extensions" \
+            --install-extension ci-artifact/protos-vscode.vsix \
+            --force
+
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3b/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3b/extensions" \
+            --install-extension harness.vsix \
+            --force
+
+      - name: Execute Run Current File through packaged extension
+        shell: bash
+        env:
+          PROTOS_I3B_RESULT: ${{ runner.temp }}/i3b/result.json
+          PROTOS_I3B_FIXTURE: ${{ runner.temp }}/i3b/fixture.protos
+          PROTOS_I3B_RUNTIME: ${{ github.workspace }}/protos-source/bin/protos
+        run: |
+          printf 'print("VS_CODE_RUN")\n' > "$PROTOS_I3B_FIXTURE"
+
+          xvfb-run -a code \
+            --user-data-dir "$RUNNER_TEMP/i3b/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3b/extensions" \
+            "$PROTOS_I3B_FIXTURE" \
+            >/tmp/protos-i3b-code.log 2>&1 &
+
+          CODE_PID=$!
+
+          for _ in $(seq 1 90); do
+            test -f "$PROTOS_I3B_RESULT" && break
+            sleep 1
+          done
+
+          if [ ! -f "$PROTOS_I3B_RESULT" ]; then
+            cat /tmp/protos-i3b-code.log || true
+            kill "$CODE_PID" >/dev/null 2>&1 || true
+            echo "VS_CODE_REAL_RUN_FAILED: no result"
+            exit 1
+          fi
+
+          python3 \
+            test/clean_run_validate.py \
+            "$PROTOS_I3B_RESULT"
+
+          kill "$CODE_PID" >/dev/null 2>&1 || true
+
+  real-debug:
+    name: Debug Protos from installed VSIX
+    needs: real-run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout extension repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Read locked Protos revision
+        id: protos-lock
+        shell: bash
+        run: |
+          revision=$(node -e '
+            const fs = require("fs");
+            const lock = JSON.parse(fs.readFileSync("protos-source.lock.json", "utf8"));
+            if (lock.repository !== "guillermomolina/protos") {
+              throw new Error(`Unexpected Protos repository: ${lock.repository}`);
+            }
+            if (!/^[0-9a-f]{40}$/.test(lock.revision)) {
+              throw new Error(`Invalid Protos revision: ${lock.revision}`);
+            }
+            process.stdout.write(lock.revision);
+          ')
+
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout locked Protos source
+        uses: actions/checkout@v5
+        with:
+          repository: guillermomolina/protos
+          ref: ${{ steps.protos-lock.outputs.revision }}
+          path: protos-source
+          fetch-depth: 1
+
+      - name: Verify locked Protos revision
+        working-directory: protos-source
+        shell: bash
+        run: |
+          actual=$(git rev-parse HEAD)
+          expected="${{ steps.protos-lock.outputs.revision }}"
+
+          test "$actual" = "$expected" || {
+            echo "PROTOS_SOURCE_REVISION_MISMATCH: expected=$expected actual=$actual"
+            exit 1
+          }
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Build locked Protos runtime
+        working-directory: protos-source
+        run: mvn -q -DskipTests package
+
+      - name: Download canonical VSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: protos-vscode-vsix-${{ github.sha }}
+          path: ci-artifact
+
+      - name: Verify artifact digest
+        working-directory: ci-artifact
+        run: sha256sum --check protos-vscode.vsix.sha256
+
+      - name: Install VS Code and Xvfb
+        shell: bash
+        run: |
+          wget -qO /tmp/code.deb \
+            https://update.code.visualstudio.com/latest/linux-deb-x64/stable
+
+          sudo apt-get update
+          sudo apt-get install -y /tmp/code.deb xvfb
+
+      - name: Build CI-only debug harness VSIX
+        run: |
+          python3 test/debug_harness_make_vsix.py \
+            "$GITHUB_WORKSPACE/debug-harness.vsix"
+
+      - name: Install packaged Protos extension and debug harness
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/i3c"
+
+          mkdir -p \
+            "$RUNNER_TEMP/i3c/extensions" \
+            "$RUNNER_TEMP/i3c/user-data"
+
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3c/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3c/extensions" \
+            --install-extension ci-artifact/protos-vscode.vsix \
+            --force
+
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3c/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3c/extensions" \
+            --install-extension debug-harness.vsix \
+            --force
+
+      - name: Execute real debugger acceptance
+        shell: bash
+        env:
+          PROTOS_I3C_RESULT: ${{ runner.temp }}/i3c/result.json
+          PROTOS_I3C_FIXTURE: ${{ runner.temp }}/i3c/debug_fixture.protos
+          PROTOS_I3C_RUNTIME: ${{ github.workspace }}/protos-source/bin/protos
+        run: |
+          mkdir -p "$RUNNER_TEMP/i3c"
+
+          cat > "$PROTOS_I3C_FIXTURE" <<'EOF'
+          x: 41
+          print(x)
+          print("done")
+          EOF
+
+          xvfb-run -a code \
+            --user-data-dir "$RUNNER_TEMP/i3c/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3c/extensions" \
+            --new-window \
+            "$PROTOS_I3C_FIXTURE" \
+            >/tmp/protos-i3c-code.log 2>&1 &
+
+          CODE_PID=$!
+
+          for _ in $(seq 1 120); do
+            test -f "$PROTOS_I3C_RESULT" && break
+            sleep 1
+          done
+
+          if [ ! -f "$PROTOS_I3C_RESULT" ]; then
+            cat /tmp/protos-i3c-code.log || true
+            kill "$CODE_PID" >/dev/null 2>&1 || true
+            echo "VS_CODE_REAL_DEBUG_FAILED: no result"
+            exit 1
+          fi
+
+          python3 \
+            test/debug_harness_validate.py \
+            "$PROTOS_I3C_RESULT"
+
+          kill "$CODE_PID" >/dev/null 2>&1 || true
+
+          BAD_OPTION="--extensionDevelopment""Path"
+
+          if grep -q -- "$BAD_OPTION" /tmp/protos-i3c-code.log; then
+            echo "VS_CODE_REAL_DEBUG_FAILED: forbidden development-path option detected"
+            exit 1
+          fi

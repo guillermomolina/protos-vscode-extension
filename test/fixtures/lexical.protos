@@ -1,0 +1,54 @@
+// LM009-B lexical fixture: valid source forms only.
+
+if: 1
+else: 2
+class: 3
+function: 4
+
+decimal: 1_000
+fraction: 12.5
+scientific: 6.022e23
+binary: 0b1010_0101
+octal: 0o755
+hexadecimal: 0xDEAD_BEEF
+
+single: 'single\nquoted'
+doubleQuoted: "double\tquoted"
+multiline: """
+    line one
+    line two with \"quoted\" content
+    """
+
+truth: true
+absence: null
+receiver: this
+arguments: args
+current: context
+
+object: {
+    true: "member names after dot remain ordinary"
+    nested: { value: false }
+}
+
+readReservedMember: object.true
+readNullMember: object.null
+
+double: x => x * 2
+sum: (a, b) => {
+    a + b
+}
+
+withRest: (first, ...rest) => rest
+
+composed: {
+    ...object
+    label: "composed"
+}
+
+/* block comments may span
+   logical source newlines */
+customOperatorResult: (1 + 2) @ 3
+customMaximal: left =>? right
+identity: object === object
+lazy: truth && false
+notTruth: !truth

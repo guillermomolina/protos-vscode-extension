@@ -1,0 +1,16 @@
+{
+    "name": "Protos VS Code Extension",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "remoteUser": "node",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.vscode-json",
+                "dbaeumer.vscode-eslint"
+            ]
+        }
+    }
+}

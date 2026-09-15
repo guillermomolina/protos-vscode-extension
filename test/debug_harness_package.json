@@ -1,0 +1,11 @@
+{
+  "name": "protos-debug-harness",
+  "displayName": "Protos Debug Harness",
+  "version": "0.0.0",
+  "publisher": "protos-ci",
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": ["*"]
+}
