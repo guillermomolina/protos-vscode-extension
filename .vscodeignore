@@ -1,0 +1,11 @@
+# LM009-I1-B explicit package boundary.
+# The exact allowed shipping set is enforced by test/validate_vsix.py.
+.vscodeignore
+extension.js
+debug_adapter.js
+package-lock.json
+node_modules/**
+test/**
+scripts/**
+dist/meta.json
+*.vsix
