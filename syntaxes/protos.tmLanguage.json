@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Protos",
+  "scopeName": "source.protos",
+  "patterns": [
+    {"include": "#comments"},
+    {"include": "#strings"},
+    {"include": "#numbers"},
+    {"include": "#reserved"},
+    {"include": "#ellipsis"},
+    {"include": "#operators"},
+    {"include": "#punctuation"}
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {"name": "comment.line.double-slash.protos", "begin": "//", "end": "$"},
+        {"name": "comment.block.protos", "begin": "/\\*", "end": "\\*/"}
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {"name": "string.quoted.triple.double.protos", "begin": "\"\"\"", "end": "\"\"\"", "patterns": [{"include": "#escapes"}]},
+        {"name": "string.quoted.single.protos", "begin": "'", "end": "'", "patterns": [{"include": "#escapes"}]},
+        {"name": "string.quoted.double.protos", "begin": "\"", "end": "\"", "patterns": [{"include": "#escapes"}]}
+      ]
+    },
+    "escapes": {"patterns": [{"name": "constant.character.escape.protos", "match": "\\\\(?:\\\\|'|\"|n|r|t|b|f|u\\{[0-9A-Fa-f]{1,6}\\})"}]},
+    "numbers": {"patterns": [
+      {"name": "constant.numeric.integer.binary.protos", "match": "(?<![\\p{L}\\p{M}\\p{N}_])0[bB][01](?:_?[01])*(?![\\p{L}\\p{M}\\p{N}_])"},
+      {"name": "constant.numeric.integer.octal.protos", "match": "(?<![\\p{L}\\p{M}\\p{N}_])0[oO][0-7](?:_?[0-7])*(?![\\p{L}\\p{M}\\p{N}_])"},
+      {"name": "constant.numeric.integer.hexadecimal.protos", "match": "(?<![\\p{L}\\p{M}\\p{N}_])0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*(?![\\p{L}\\p{M}\\p{N}_])"},
+      {"name": "constant.numeric.float.protos", "match": "(?<![\\p{L}\\p{M}\\p{N}_])(?:[0-9](?:_?[0-9])*)\\.[0-9](?:_?[0-9])*(?:[eE][+-]?[0-9](?:_?[0-9])*)?(?![\\p{L}\\p{M}\\p{N}_])"},
+      {"name": "constant.numeric.float.exponent.protos", "match": "(?<![\\p{L}\\p{M}\\p{N}_])[0-9](?:_?[0-9])*[eE][+-]?[0-9](?:_?[0-9])*(?![\\p{L}\\p{M}\\p{N}_])"},
+      {"name": "constant.numeric.integer.decimal.protos", "match": "(?<![\\p{L}\\p{M}\\p{N}_])[0-9](?:_?[0-9])*(?![\\p{L}\\p{M}\\p{N}_])"}
+    ]},
+    "reserved": {"patterns": [
+      {"name": "variable.language.protos", "match": "(?<![.\\p{L}\\p{M}\\p{N}_])(?:this|context|args)(?![\\p{L}\\p{M}\\p{N}_])"},
+      {"name": "keyword.control.protos", "match": "(?<![.\\p{L}\\p{M}\\p{N}_])super(?![\\p{L}\\p{M}\\p{N}_])"},
+      {"name": "constant.language.protos", "match": "(?<![.\\p{L}\\p{M}\\p{N}_])(?:true|false|null)(?![\\p{L}\\p{M}\\p{N}_])"}
+    ]},
+    "ellipsis": {"patterns": [{"name": "keyword.operator.ellipsis.protos", "match": "\\.\\.\\."}]},
+    "operators": {"patterns": [{"name": "keyword.operator.protos", "match": "(?:[!$%&*+\\-/<=>?@\\\\^|~]+|:)"}]},
+    "punctuation": {"patterns": [
+      {"name": "punctuation.accessor.protos", "match": "\\."},
+      {"name": "punctuation.separator.protos", "match": "[,;]"},
+      {"name": "punctuation.section.group.begin.protos", "match": "\\("},
+      {"name": "punctuation.section.group.end.protos", "match": "\\)"},
+      {"name": "punctuation.section.brackets.begin.protos", "match": "\\["},
+      {"name": "punctuation.section.brackets.end.protos", "match": "\\]"},
+      {"name": "punctuation.section.block.begin.protos", "match": "\\{"},
+      {"name": "punctuation.section.block.end.protos", "match": "\\}"}
+    ]}
+  }
+}
