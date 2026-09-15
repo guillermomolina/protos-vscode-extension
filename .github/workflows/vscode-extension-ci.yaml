@@ -4,9 +4,6 @@ on:
   workflow_dispatch:
 
   push:
-    paths:
-      - "**"
-      - "!node_modules/**"
 
 permissions:
   contents: read
@@ -14,7 +11,7 @@ permissions:
 
 jobs:
   package:
-    name: Build canonical VSIX artifact
+    name: Extension tests and VSIX package
     runs-on: ubuntu-latest
 
     steps:
@@ -30,22 +27,24 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate canonicalizer
-        run: node --check scripts/canonicalize_vsix.js
-
-      - name: Build production extension
-        run: npm run vscode:prepublish
+      - name: Run extension test suite
+        run: npm test
 
       - name: Package raw VSIX
-        run: npm exec --yes vsce -- package --no-dependencies --out raw.vsix
+        run: npm run package:vsix -- --out raw.vsix
 
-      - name: Validate VSIX content
+      - name: Validate raw VSIX
         run: python3 test/validate_vsix.py raw.vsix
 
-      - name: Derive SOURCE_DATE_EPOCH
+      - name: Derive source timestamp
         id: source-date
         shell: bash
         run: |
@@ -58,13 +57,14 @@ jobs:
             protos-vscode.vsix \
             "${{ steps.source-date.outputs.epoch }}"
 
-      - name: Prove reproducibility
-        run: python3 test/validate_reproducibility.py raw.vsix
-
       - name: Verify canonical artifact
         shell: bash
         run: |
           sha256sum protos-vscode.vsix | tee protos-vscode.vsix.sha256
+
+      - name: Verify canonical reproducibility
+        run: |
+          python3 test/validate_reproducibility.py raw.vsix
 
       - name: Upload canonical VSIX
         uses: actions/upload-artifact@v4
@@ -77,7 +77,7 @@ jobs:
           retention-days: 14
 
   clean-install:
-    name: Install canonical VSIX in clean VS Code profile
+    name: Clean VS Code installation
     needs: package
     runs-on: ubuntu-latest
 
@@ -87,13 +87,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download canonical VSIX artifact
+      - name: Download canonical VSIX
         uses: actions/download-artifact@v4
         with:
           name: protos-vscode-vsix-${{ github.sha }}
           path: ci-artifact
 
-      - name: Verify artifact digest
+      - name: Verify canonical artifact
         working-directory: ci-artifact
         run: sha256sum --check protos-vscode.vsix.sha256
 
@@ -106,59 +106,59 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y /tmp/code.deb
 
-      - name: Build CI-only clean-install harness VSIX
+      - name: Build clean-install harness VSIX
         run: |
           python3 test/clean_install_make_vsix.py \
             "$GITHUB_WORKSPACE/harness.vsix"
 
-      - name: Install Protos VSIX into isolated profile
+      - name: Install extension and harness
         shell: bash
         run: |
-          rm -rf "$RUNNER_TEMP/i3a"
+          rm -rf "$RUNNER_TEMP/vscode-clean"
 
           mkdir -p \
-            "$RUNNER_TEMP/i3a/extensions" \
-            "$RUNNER_TEMP/i3a/user-data"
+            "$RUNNER_TEMP/vscode-clean/extensions" \
+            "$RUNNER_TEMP/vscode-clean/user-data"
 
           code \
-            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-clean/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-clean/extensions" \
             --install-extension ci-artifact/protos-vscode.vsix \
             --force
 
           code \
-            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-clean/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-clean/extensions" \
             --install-extension harness.vsix \
             --force
 
-      - name: Verify installed Protos extension
+      - name: Verify installed extension
         shell: bash
         run: |
           code \
-            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-clean/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-clean/extensions" \
             --list-extensions \
             --show-versions \
-            | tee "$RUNNER_TEMP/i3a/installed.txt"
+            | tee "$RUNNER_TEMP/vscode-clean/installed.txt"
 
           grep -q '^guillermomolina.protos@' \
-            "$RUNNER_TEMP/i3a/installed.txt"
+            "$RUNNER_TEMP/vscode-clean/installed.txt"
 
-      - name: Exercise installed packaged extension
+      - name: Execute clean-install acceptance
         shell: bash
         env:
-          PROTOS_I3_RESULT: ${{ runner.temp }}/i3a/result.json
-          PROTOS_I3_FIXTURE: ${{ runner.temp }}/i3a/fixture.protos
+          PROTOS_I3_RESULT: ${{ runner.temp }}/vscode-clean/result.json
+          PROTOS_I3_FIXTURE: ${{ runner.temp }}/vscode-clean/fixture.protos
         run: |
           printf 'print("clean-install")\n' > "$PROTOS_I3_FIXTURE"
 
           nohup code \
-            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-clean/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-clean/extensions" \
             --disable-gpu \
             "$PROTOS_I3_FIXTURE" \
-            >/tmp/protos-i3a-code.log 2>&1 &
+            >/tmp/protos-vscode-clean.log 2>&1 &
 
           CODE_PID=$!
 
@@ -168,7 +168,7 @@ jobs:
           done
 
           if [ ! -f "$PROTOS_I3_RESULT" ]; then
-            cat /tmp/protos-i3a-code.log || true
+            cat /tmp/protos-vscode-clean.log || true
             kill "$CODE_PID" >/dev/null 2>&1 || true
             echo "VS_CODE_CLEAN_INSTALL_FAILED: harness produced no result"
             exit 1
@@ -181,7 +181,7 @@ jobs:
           kill "$CODE_PID" >/dev/null 2>&1 || true
 
   real-run:
-    name: Run Protos from installed VSIX
+    name: Real Run acceptance
     needs: clean-install
     runs-on: ubuntu-latest
 
@@ -197,13 +197,22 @@ jobs:
         run: |
           revision=$(node -e '
             const fs = require("fs");
-            const lock = JSON.parse(fs.readFileSync("protos-source.lock.json", "utf8"));
+            const lock = JSON.parse(
+              fs.readFileSync("protos-source.lock.json", "utf8")
+            );
+
             if (lock.repository !== "guillermomolina/protos") {
-              throw new Error(`Unexpected Protos repository: ${lock.repository}`);
+              throw new Error(
+                `Unexpected Protos repository: ${lock.repository}`
+              );
             }
+
             if (!/^[0-9a-f]{40}$/.test(lock.revision)) {
-              throw new Error(`Invalid Protos revision: ${lock.revision}`);
+              throw new Error(
+                `Invalid Protos revision: ${lock.revision}`
+              );
             }
+
             process.stdout.write(lock.revision);
           ')
 
@@ -225,7 +234,8 @@ jobs:
           expected="${{ steps.protos-lock.outputs.revision }}"
 
           test "$actual" = "$expected" || {
-            echo "PROTOS_SOURCE_REVISION_MISMATCH: expected=$expected actual=$actual"
+            echo \
+              "PROTOS_SOURCE_REVISION_MISMATCH: expected=$expected actual=$actual"
             exit 1
           }
 
@@ -239,13 +249,13 @@ jobs:
         working-directory: protos-source
         run: mvn -q -DskipTests package
 
-      - name: Download canonical VSIX artifact
+      - name: Download canonical VSIX
         uses: actions/download-artifact@v4
         with:
           name: protos-vscode-vsix-${{ github.sha }}
           path: ci-artifact
 
-      - name: Verify artifact digest
+      - name: Verify canonical artifact
         working-directory: ci-artifact
         run: sha256sum --check protos-vscode.vsix.sha256
 
@@ -263,41 +273,41 @@ jobs:
           python3 test/clean_run_make_vsix.py \
             "$GITHUB_WORKSPACE/harness.vsix"
 
-      - name: Install packaged Protos extension and harness
+      - name: Install extension and harness
         shell: bash
         run: |
-          rm -rf "$RUNNER_TEMP/i3b"
+          rm -rf "$RUNNER_TEMP/vscode-run"
 
           mkdir -p \
-            "$RUNNER_TEMP/i3b/extensions" \
-            "$RUNNER_TEMP/i3b/user-data"
+            "$RUNNER_TEMP/vscode-run/extensions" \
+            "$RUNNER_TEMP/vscode-run/user-data"
 
           code \
-            --user-data-dir "$RUNNER_TEMP/i3b/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3b/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-run/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-run/extensions" \
             --install-extension ci-artifact/protos-vscode.vsix \
             --force
 
           code \
-            --user-data-dir "$RUNNER_TEMP/i3b/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3b/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-run/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-run/extensions" \
             --install-extension harness.vsix \
             --force
 
-      - name: Execute Run Current File through packaged extension
+      - name: Execute Run Current File acceptance
         shell: bash
         env:
-          PROTOS_I3B_RESULT: ${{ runner.temp }}/i3b/result.json
-          PROTOS_I3B_FIXTURE: ${{ runner.temp }}/i3b/fixture.protos
+          PROTOS_I3B_RESULT: ${{ runner.temp }}/vscode-run/result.json
+          PROTOS_I3B_FIXTURE: ${{ runner.temp }}/vscode-run/fixture.protos
           PROTOS_I3B_RUNTIME: ${{ github.workspace }}/protos-source/bin/protos
         run: |
           printf 'print("VS_CODE_RUN")\n' > "$PROTOS_I3B_FIXTURE"
 
           xvfb-run -a code \
-            --user-data-dir "$RUNNER_TEMP/i3b/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3b/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-run/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-run/extensions" \
             "$PROTOS_I3B_FIXTURE" \
-            >/tmp/protos-i3b-code.log 2>&1 &
+            >/tmp/protos-vscode-run.log 2>&1 &
 
           CODE_PID=$!
 
@@ -307,7 +317,7 @@ jobs:
           done
 
           if [ ! -f "$PROTOS_I3B_RESULT" ]; then
-            cat /tmp/protos-i3b-code.log || true
+            cat /tmp/protos-vscode-run.log || true
             kill "$CODE_PID" >/dev/null 2>&1 || true
             echo "VS_CODE_REAL_RUN_FAILED: no result"
             exit 1
@@ -320,7 +330,7 @@ jobs:
           kill "$CODE_PID" >/dev/null 2>&1 || true
 
   real-debug:
-    name: Debug Protos from installed VSIX
+    name: Real Debug acceptance
     needs: real-run
     runs-on: ubuntu-latest
 
@@ -336,13 +346,22 @@ jobs:
         run: |
           revision=$(node -e '
             const fs = require("fs");
-            const lock = JSON.parse(fs.readFileSync("protos-source.lock.json", "utf8"));
+            const lock = JSON.parse(
+              fs.readFileSync("protos-source.lock.json", "utf8")
+            );
+
             if (lock.repository !== "guillermomolina/protos") {
-              throw new Error(`Unexpected Protos repository: ${lock.repository}`);
+              throw new Error(
+                `Unexpected Protos repository: ${lock.repository}`
+              );
             }
+
             if (!/^[0-9a-f]{40}$/.test(lock.revision)) {
-              throw new Error(`Invalid Protos revision: ${lock.revision}`);
+              throw new Error(
+                `Invalid Protos revision: ${lock.revision}`
+              );
             }
+
             process.stdout.write(lock.revision);
           ')
 
@@ -364,7 +383,8 @@ jobs:
           expected="${{ steps.protos-lock.outputs.revision }}"
 
           test "$actual" = "$expected" || {
-            echo "PROTOS_SOURCE_REVISION_MISMATCH: expected=$expected actual=$actual"
+            echo \
+              "PROTOS_SOURCE_REVISION_MISMATCH: expected=$expected actual=$actual"
             exit 1
           }
 
@@ -378,13 +398,13 @@ jobs:
         working-directory: protos-source
         run: mvn -q -DskipTests package
 
-      - name: Download canonical VSIX artifact
+      - name: Download canonical VSIX
         uses: actions/download-artifact@v4
         with:
           name: protos-vscode-vsix-${{ github.sha }}
           path: ci-artifact
 
-      - name: Verify artifact digest
+      - name: Verify canonical artifact
         working-directory: ci-artifact
         run: sha256sum --check protos-vscode.vsix.sha256
 
@@ -397,40 +417,40 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y /tmp/code.deb xvfb
 
-      - name: Build CI-only debug harness VSIX
+      - name: Build debug harness VSIX
         run: |
           python3 test/debug_harness_make_vsix.py \
             "$GITHUB_WORKSPACE/debug-harness.vsix"
 
-      - name: Install packaged Protos extension and debug harness
+      - name: Install extension and debug harness
         shell: bash
         run: |
-          rm -rf "$RUNNER_TEMP/i3c"
+          rm -rf "$RUNNER_TEMP/vscode-debug"
 
           mkdir -p \
-            "$RUNNER_TEMP/i3c/extensions" \
-            "$RUNNER_TEMP/i3c/user-data"
+            "$RUNNER_TEMP/vscode-debug/extensions" \
+            "$RUNNER_TEMP/vscode-debug/user-data"
 
           code \
-            --user-data-dir "$RUNNER_TEMP/i3c/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3c/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-debug/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-debug/extensions" \
             --install-extension ci-artifact/protos-vscode.vsix \
             --force
 
           code \
-            --user-data-dir "$RUNNER_TEMP/i3c/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3c/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-debug/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-debug/extensions" \
             --install-extension debug-harness.vsix \
             --force
 
       - name: Execute real debugger acceptance
         shell: bash
         env:
-          PROTOS_I3C_RESULT: ${{ runner.temp }}/i3c/result.json
-          PROTOS_I3C_FIXTURE: ${{ runner.temp }}/i3c/debug_fixture.protos
+          PROTOS_I3C_RESULT: ${{ runner.temp }}/vscode-debug/result.json
+          PROTOS_I3C_FIXTURE: ${{ runner.temp }}/vscode-debug/debug_fixture.protos
           PROTOS_I3C_RUNTIME: ${{ github.workspace }}/protos-source/bin/protos
         run: |
-          mkdir -p "$RUNNER_TEMP/i3c"
+          mkdir -p "$RUNNER_TEMP/vscode-debug"
 
           cat > "$PROTOS_I3C_FIXTURE" <<'EOF'
           x: 41
@@ -439,11 +459,11 @@ jobs:
           EOF
 
           xvfb-run -a code \
-            --user-data-dir "$RUNNER_TEMP/i3c/user-data" \
-            --extensions-dir "$RUNNER_TEMP/i3c/extensions" \
+            --user-data-dir "$RUNNER_TEMP/vscode-debug/user-data" \
+            --extensions-dir "$RUNNER_TEMP/vscode-debug/extensions" \
             --new-window \
             "$PROTOS_I3C_FIXTURE" \
-            >/tmp/protos-i3c-code.log 2>&1 &
+            >/tmp/protos-vscode-debug.log 2>&1 &
 
           CODE_PID=$!
 
@@ -453,7 +473,7 @@ jobs:
           done
 
           if [ ! -f "$PROTOS_I3C_RESULT" ]; then
-            cat /tmp/protos-i3c-code.log || true
+            cat /tmp/protos-vscode-debug.log || true
             kill "$CODE_PID" >/dev/null 2>&1 || true
             echo "VS_CODE_REAL_DEBUG_FAILED: no result"
             exit 1
@@ -467,7 +487,8 @@ jobs:
 
           BAD_OPTION="--extensionDevelopment""Path"
 
-          if grep -q -- "$BAD_OPTION" /tmp/protos-i3c-code.log; then
-            echo "VS_CODE_REAL_DEBUG_FAILED: forbidden development-path option detected"
+          if grep -q -- "$BAD_OPTION" /tmp/protos-vscode-debug.log; then
+            echo \
+              "VS_CODE_REAL_DEBUG_FAILED: forbidden development-path option detected"
             exit 1
           fi

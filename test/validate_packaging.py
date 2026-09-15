@@ -30,8 +30,31 @@ EXPECTED_SCRIPTS = {
     ),
     "package:assets": "node scripts/sync_package_assets.js --check",
     "vscode:prepublish": "npm run build && npm run package:assets",
+    "test:build": "npm run build",
+    "test:grammar": "python3 test/validate_grammar.py",
+    "test:contract": "python3 test/validate_extension.py",
+    "test:packaging": "python3 test/validate_packaging.py",
+    "test:run": "node test/run_current_file.test.js",
+    "test:debug": "node test/debug_integration.test.js",
+    "test:lsp": "node test/language_server_integration.test.js",
+    "test": (
+        "npm run test:build && "
+        "npm run test:grammar && "
+        "npm run test:contract && "
+        "npm run test:packaging && "
+        "npm run test:run && "
+        "npm run test:debug && "
+        "npm run test:lsp"
+    ),
     "package:vsix": "vsce package --no-dependencies",
     "package:vsix:canonical": "node scripts/canonicalize_vsix.js",
+    "test:vsix": (
+        "rm -f /tmp/protos-vscode-extension.vsix && "
+        "npm run package:vsix -- --out /tmp/protos-vscode-extension.vsix && "
+        "python3 test/validate_vsix.py /tmp/protos-vscode-extension.vsix && "
+        "python3 test/validate_reproducibility.py "
+        "/tmp/protos-vscode-extension.vsix"
+    ),
 }
 
 PACKAGE_LICENSE = ROOT / "license.txt"
@@ -41,6 +64,10 @@ VSCODEIGNORE = ROOT / ".vscodeignore"
 EXPECTED_VSCODEIGNORE = """# LM009-I1-B explicit package boundary.
 # The exact allowed shipping set is enforced by test/validate_vsix.py.
 .vscodeignore
+.devcontainer/**
+.github/**
+.gitignore
+LICENSE.TXT
 extension.js
 debug_adapter.js
 package-lock.json
@@ -48,8 +75,8 @@ node_modules/**
 test/**
 scripts/**
 dist/meta.json
+protos-source.lock.json
 *.vsix
-LICENSE.TXT
 """
 
 def fail(message):
