@@ -6,6 +6,28 @@
 
 The canonical Protos language, runtime, specification, and core implementation remain owned by `guillermomolina/protos`.
 
+## Cross-repository Protos authority
+
+Formal Protos project work remains operationally governed from
+`guillermomolina/protos`. Normative Protos language and Standard Library
+semantics remain under `guillermomolina/protos/spec`.
+
+Canonical durable, non-normative Protos project records live in:
+
+```text
+guillermomolina/protos-project-docs:docs/project/**
+```
+
+This repository remains authoritative for extension source, packaging, VSIX and
+release artifacts, extension-specific evidence, extension-specific
+documentation, and its existing local `BUG` / `CI` / `DOC` / `REL` Issue
+families.
+
+Do not duplicate a formal Protos work item here merely because extension work
+implements part of it. When a formal Protos work item requires durable project
+evidence, publish that durable record in `guillermomolina/protos-project-docs`
+and reference the exact extension revision or immutable artifact identity.
+
 ## Issue families
 
 Use issue families owned by this repository only:
