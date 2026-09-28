@@ -336,7 +336,7 @@ function createProtosLanguageServerController(vscode, languageClientApi) {
             } catch (error) {
                 const detail =
                     error instanceof Error ? error.message : String(error);
-                await vscode.window.showErrorMessage(
+                void vscode.window.showErrorMessage(
                     `Unable to start the Protos language server: ${detail}`
                 );
                 client = undefined;

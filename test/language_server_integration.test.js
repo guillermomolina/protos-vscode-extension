@@ -114,8 +114,12 @@ function harness(options = {}) {
             }
         },
         window: {
-            async showErrorMessage(message) {
+            showErrorMessage(message) {
                 calls.errors.push(message);
+                if (options.blockErrorMessage) {
+                    return new Promise(() => {});
+                }
+                return Promise.resolve(undefined);
             }
         }
     };
@@ -258,10 +262,19 @@ async function testControllerOwnsOneClientAndStopsItCleanly() {
 }
 
 async function testFailedStartupIsVisibleAndRetryable() {
-    const h = harness({ startFailures: 1 });
+    const h = harness({
+        startFailures: 1,
+        blockErrorMessage: true
+    });
     const controller = createProtosLanguageServerController(h.vscode, h.languageClientApi);
 
-    assert.equal(await controller.start(), undefined);
+    const firstStart = controller.start();
+    const firstOutcome = await Promise.race([
+        firstStart.then(() => "returned"),
+        new Promise((resolve) => setTimeout(() => resolve("timeout"), 250))
+    ]);
+    assert.equal(firstOutcome, "returned");
+    assert.equal(await firstStart, undefined);
     assert.equal(h.calls.constructed.length, 1);
     assert.equal(h.calls.starts, 1);
     assert.equal(h.calls.errors.length, 1);
