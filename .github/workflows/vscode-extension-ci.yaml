@@ -3,8 +3,6 @@ name: VS Code extension CI
 on:
   workflow_dispatch:
 
-  push:
-
 permissions:
   contents: read
   actions: read
