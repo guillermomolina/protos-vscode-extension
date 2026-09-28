@@ -37,5 +37,5 @@ content_types = """<?xml version="1.0" encoding="utf-8"?>
 with zipfile.ZipFile(sys.argv[1], "w", compression=zipfile.ZIP_DEFLATED) as archive:
     archive.writestr("[Content_Types].xml", content_types)
     archive.writestr("extension.vsixmanifest", manifest)
-    archive.write(root / "package.json", "extension/package.json")
-    archive.write(root / "extension.js", "extension/extension.js")
+    archive.write(root / "debug_harness_package.json", "extension/package.json")
+    archive.write(root / "debug_harness_extension.js", "extension/extension.js")

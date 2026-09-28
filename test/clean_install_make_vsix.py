@@ -42,7 +42,7 @@ here = Path(__file__).resolve().parent
 with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
     archive.writestr("[Content_Types].xml", content_types)
     archive.writestr("extension.vsixmanifest", manifest)
-    archive.write(here / "package.json", "extension/package.json")
-    archive.write(here / "extension.js", "extension/extension.js")
+    archive.write(here / "clean_install_package.json", "extension/package.json")
+    archive.write(here / "clean_install_extension.js", "extension/extension.js")
 
 print(output)
