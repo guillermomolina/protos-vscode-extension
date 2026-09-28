@@ -104,7 +104,7 @@ jobs:
             https://update.code.visualstudio.com/latest/linux-deb-x64/stable
 
           sudo apt-get update
-          sudo apt-get install -y /tmp/code.deb
+          sudo apt-get install -y /tmp/code.deb xvfb
 
       - name: Build clean-install harness VSIX
         run: |
@@ -153,7 +153,7 @@ jobs:
         run: |
           printf 'print("clean-install")\n' > "$PROTOS_I3_FIXTURE"
 
-          nohup code \
+          xvfb-run -a code \
             --user-data-dir "$RUNNER_TEMP/vscode-clean/user-data" \
             --extensions-dir "$RUNNER_TEMP/vscode-clean/extensions" \
             --disable-gpu \
