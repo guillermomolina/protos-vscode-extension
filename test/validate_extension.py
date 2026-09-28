@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import json
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +12,9 @@ CONFIG = ROOT / "language-configuration.json"
 GRAMMAR = ROOT / "syntaxes" / "protos.tmLanguage.json"
 EXTENSION = ROOT / "extension.js"
 DEBUG_ADAPTER = ROOT / "debug_adapter.js"
+PROTOS_SOURCE_LOCK = ROOT / "protos-source.lock.json"
+README = ROOT / "README.md"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "vscode-extension-ci.yaml"
 
 
 def fail(message):
@@ -25,10 +29,45 @@ def read_json(path):
         fail("%s: %s" % (path, exc))
 
 
+def workflow_job(workflow, name):
+    match = re.search(
+        r"(?ms)^  %s:\n.*?(?=^  [A-Za-z0-9_-]+:\n|\Z)"
+        % re.escape(name),
+        workflow,
+    )
+    if match is None:
+        fail("CI workflow missing job: " + name)
+    return match.group(0)
+
+
 def main():
     package = read_json(PACKAGE)
     config = read_json(CONFIG)
     grammar = read_json(GRAMMAR)
+    source_lock = read_json(PROTOS_SOURCE_LOCK)
+
+    try:
+        readme = README.read_text(encoding="utf-8")
+        workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    except OSError as exc:
+        fail(str(exc))
+
+    if source_lock.get("repository") != "guillermomolina/protos":
+        fail("Protos source lock repository authority changed")
+
+    revision = source_lock.get("revision")
+    if (
+        not isinstance(revision, str)
+        or re.fullmatch(r"[0-9a-f]{40}", revision) is None
+    ):
+        fail("Protos source lock revision must be an exact 40-hex SHA")
+
+    readme_authority = (
+        "repository = guillermomolina/protos\n"
+        "revision  = %s" % revision
+    )
+    if readme_authority not in readme:
+        fail("README Protos source authority must agree with the source lock")
 
     expected_scalar = {
         "name": "protos",
@@ -302,6 +341,41 @@ def main():
         if forbidden in extension or forbidden in debug_adapter:
             fail("editor must not cross the approved debugger boundary: " + forbidden)
 
+    required_toolchain_markers = (
+        "id: protos-toolchain",
+        'fs.readFileSync("protos-source/toolchain.json", "utf8")',
+        "graalvm.distribution",
+        "graalvm.jdk_feature",
+        "graalvm.jdk_version",
+        "graalvm.release",
+        "graal_components",
+        "release !== componentsVersion",
+        "versionFeature !== jdkFeature",
+        "uses: actions/setup-java@v5",
+        "distribution: ${{ steps.protos-toolchain.outputs.distribution }}",
+        "java-version: ${{ steps.protos-toolchain.outputs.jdk_version }}",
+        "PROTOS_JAVA_VERSION: ${{ steps.protos-toolchain.outputs.jdk_version }}",
+        "CANONICAL_JAVA_RUNTIME=PASS",
+    )
+    for job_name in ("real-run", "real-debug"):
+        job = workflow_job(workflow, job_name)
+        for marker in required_toolchain_markers:
+            if marker not in job:
+                fail(
+                    "%s must derive canonical Java from the locked Protos "
+                    "toolchain: %s" % (job_name, marker)
+                )
+        if "distribution: temurin" in job:
+            fail(
+                "%s must not use Temurin for canonical Protos acceptance"
+                % job_name
+            )
+        if 'ref: ${{ steps.protos-lock.outputs.revision }}' not in job:
+            fail("%s must checkout the exact locked Protos revision" % job_name)
+
+    print("DIST006_B2_CI_TOOLCHAIN_AUTHORITY_VALIDATION: PASS")
+    print("PROTOS_SOURCE_LOCK=" + revision)
+    print("PROTOS_TOOLCHAIN_SOURCE=LOCKED_PROTOS_TOOLCHAIN_JSON")
     print("LM009_B_EXTENSION_VALIDATION: PASS")
     print("LM009_C_RUN_WIRING_VALIDATION: PASS")
     print("LM009_E_DEBUG_WIRING_VALIDATION: PASS")

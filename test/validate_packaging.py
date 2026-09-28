@@ -67,6 +67,7 @@ EXPECTED_VSCODEIGNORE = """# LM009-I1-B explicit package boundary.
 .devcontainer/**
 .github/**
 .gitignore
+AGENTS.md
 LICENSE.TXT
 extension.js
 debug_adapter.js

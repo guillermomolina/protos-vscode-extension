@@ -4,6 +4,7 @@
 .devcontainer/**
 .github/**
 .gitignore
+AGENTS.md
 LICENSE.TXT
 extension.js
 debug_adapter.js

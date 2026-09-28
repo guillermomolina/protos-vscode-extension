@@ -17,7 +17,7 @@ The consumed revision is recorded in
 
 ```text
 repository = guillermomolina/protos
-revision  = 5e33ab7b46a21da0eaecd9d5a5721d95b170518a
+revision  = 43f883b9f244c635311c9e2a049b1b3cf65bae93
 ```
 
 The lock file is the authority for the Protos source revision used by the

@@ -9,3 +9,5 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 USER node
+
+WORKDIR /workspaces/protos-vscode-extension

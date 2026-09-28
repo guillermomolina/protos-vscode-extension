@@ -239,11 +239,114 @@ jobs:
             exit 1
           }
 
+      - name: Read locked Protos toolchain
+        id: protos-toolchain
+        shell: bash
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require("fs");
+
+          const toolchain = JSON.parse(
+            fs.readFileSync("protos-source/toolchain.json", "utf8")
+          );
+          const graalvm = toolchain.graalvm;
+          const components = toolchain.graal_components;
+
+          if (graalvm === null || typeof graalvm !== "object") {
+            throw new Error("Missing graalvm toolchain object");
+          }
+          if (components === null || typeof components !== "object") {
+            throw new Error("Missing graal_components toolchain object");
+          }
+
+          function singleLineString(value, name) {
+            if (
+              typeof value !== "string" ||
+              value.trim() === "" ||
+              /[\r\n]/.test(value)
+            ) {
+              throw new Error(
+                `Invalid ${name}: ${JSON.stringify(value)}`
+              );
+            }
+            return value.trim();
+          }
+
+          const distribution = singleLineString(
+            graalvm.distribution,
+            "graalvm.distribution"
+          );
+          const jdkVersion = singleLineString(
+            graalvm.jdk_version,
+            "graalvm.jdk_version"
+          );
+          const release = singleLineString(
+            graalvm.release,
+            "graalvm.release"
+          );
+          const componentsVersion = singleLineString(
+            components.version,
+            "graal_components.version"
+          );
+          const jdkFeature = graalvm.jdk_feature;
+
+          if (!Number.isInteger(jdkFeature) || jdkFeature <= 0) {
+            throw new Error(
+              `Invalid graalvm.jdk_feature: ${JSON.stringify(jdkFeature)}`
+            );
+          }
+          if (release !== componentsVersion) {
+            throw new Error(
+              `Graal version mismatch: release=${release} components=${componentsVersion}`
+            );
+          }
+
+          const match = /^(\d+)(?:[.+-]|$)/.exec(jdkVersion);
+          const versionFeature = match ? Number(match[1]) : NaN;
+          if (versionFeature !== jdkFeature) {
+            throw new Error(
+              `JDK feature mismatch: feature=${jdkFeature} version=${jdkVersion}`
+            );
+          }
+
+          process.stdout.write(`distribution=${distribution}\n`);
+          process.stdout.write(`jdk_version=${jdkVersion}\n`);
+          process.stdout.write(`jdk_feature=${jdkFeature}\n`);
+          process.stdout.write(`graalvm_release=${release}\n`);
+          NODE
+
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
-          distribution: temurin
-          java-version: "25"
+          distribution: ${{ steps.protos-toolchain.outputs.distribution }}
+          java-version: ${{ steps.protos-toolchain.outputs.jdk_version }}
+
+      - name: Verify canonical Java runtime
+        shell: bash
+        env:
+          PROTOS_SOURCE_REVISION: ${{ steps.protos-lock.outputs.revision }}
+          PROTOS_GRAALVM_DISTRIBUTION: ${{ steps.protos-toolchain.outputs.distribution }}
+          PROTOS_GRAALVM_RELEASE: ${{ steps.protos-toolchain.outputs.graalvm_release }}
+          PROTOS_JAVA_VERSION: ${{ steps.protos-toolchain.outputs.jdk_version }}
+        run: |
+          actual=$(
+            java -XshowSettings:properties -version 2>&1 \
+              | sed -n 's/^[[:space:]]*java.version = //p' \
+              | head -n 1
+          )
+
+          if [ -z "$actual" ] || [ "$actual" != "$PROTOS_JAVA_VERSION" ]; then
+            echo \
+              "CANONICAL_JAVA_RUNTIME_FAILED: expected=$PROTOS_JAVA_VERSION actual=$actual"
+            exit 1
+          fi
+
+          echo "PROTOS_SOURCE_REVISION=$PROTOS_SOURCE_REVISION"
+          echo "PROTOS_GRAALVM_DISTRIBUTION=$PROTOS_GRAALVM_DISTRIBUTION"
+          echo "PROTOS_GRAALVM_RELEASE=$PROTOS_GRAALVM_RELEASE"
+          echo "PROTOS_JAVA_VERSION=$PROTOS_JAVA_VERSION"
+          echo "ACTUAL_JAVA_VERSION=$actual"
+          echo "CANONICAL_JAVA_RUNTIME=PASS"
 
       - name: Build locked Protos runtime
         working-directory: protos-source
@@ -388,11 +491,114 @@ jobs:
             exit 1
           }
 
+      - name: Read locked Protos toolchain
+        id: protos-toolchain
+        shell: bash
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require("fs");
+
+          const toolchain = JSON.parse(
+            fs.readFileSync("protos-source/toolchain.json", "utf8")
+          );
+          const graalvm = toolchain.graalvm;
+          const components = toolchain.graal_components;
+
+          if (graalvm === null || typeof graalvm !== "object") {
+            throw new Error("Missing graalvm toolchain object");
+          }
+          if (components === null || typeof components !== "object") {
+            throw new Error("Missing graal_components toolchain object");
+          }
+
+          function singleLineString(value, name) {
+            if (
+              typeof value !== "string" ||
+              value.trim() === "" ||
+              /[\r\n]/.test(value)
+            ) {
+              throw new Error(
+                `Invalid ${name}: ${JSON.stringify(value)}`
+              );
+            }
+            return value.trim();
+          }
+
+          const distribution = singleLineString(
+            graalvm.distribution,
+            "graalvm.distribution"
+          );
+          const jdkVersion = singleLineString(
+            graalvm.jdk_version,
+            "graalvm.jdk_version"
+          );
+          const release = singleLineString(
+            graalvm.release,
+            "graalvm.release"
+          );
+          const componentsVersion = singleLineString(
+            components.version,
+            "graal_components.version"
+          );
+          const jdkFeature = graalvm.jdk_feature;
+
+          if (!Number.isInteger(jdkFeature) || jdkFeature <= 0) {
+            throw new Error(
+              `Invalid graalvm.jdk_feature: ${JSON.stringify(jdkFeature)}`
+            );
+          }
+          if (release !== componentsVersion) {
+            throw new Error(
+              `Graal version mismatch: release=${release} components=${componentsVersion}`
+            );
+          }
+
+          const match = /^(\d+)(?:[.+-]|$)/.exec(jdkVersion);
+          const versionFeature = match ? Number(match[1]) : NaN;
+          if (versionFeature !== jdkFeature) {
+            throw new Error(
+              `JDK feature mismatch: feature=${jdkFeature} version=${jdkVersion}`
+            );
+          }
+
+          process.stdout.write(`distribution=${distribution}\n`);
+          process.stdout.write(`jdk_version=${jdkVersion}\n`);
+          process.stdout.write(`jdk_feature=${jdkFeature}\n`);
+          process.stdout.write(`graalvm_release=${release}\n`);
+          NODE
+
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
-          distribution: temurin
-          java-version: "25"
+          distribution: ${{ steps.protos-toolchain.outputs.distribution }}
+          java-version: ${{ steps.protos-toolchain.outputs.jdk_version }}
+
+      - name: Verify canonical Java runtime
+        shell: bash
+        env:
+          PROTOS_SOURCE_REVISION: ${{ steps.protos-lock.outputs.revision }}
+          PROTOS_GRAALVM_DISTRIBUTION: ${{ steps.protos-toolchain.outputs.distribution }}
+          PROTOS_GRAALVM_RELEASE: ${{ steps.protos-toolchain.outputs.graalvm_release }}
+          PROTOS_JAVA_VERSION: ${{ steps.protos-toolchain.outputs.jdk_version }}
+        run: |
+          actual=$(
+            java -XshowSettings:properties -version 2>&1 \
+              | sed -n 's/^[[:space:]]*java.version = //p' \
+              | head -n 1
+          )
+
+          if [ -z "$actual" ] || [ "$actual" != "$PROTOS_JAVA_VERSION" ]; then
+            echo \
+              "CANONICAL_JAVA_RUNTIME_FAILED: expected=$PROTOS_JAVA_VERSION actual=$actual"
+            exit 1
+          fi
+
+          echo "PROTOS_SOURCE_REVISION=$PROTOS_SOURCE_REVISION"
+          echo "PROTOS_GRAALVM_DISTRIBUTION=$PROTOS_GRAALVM_DISTRIBUTION"
+          echo "PROTOS_GRAALVM_RELEASE=$PROTOS_GRAALVM_RELEASE"
+          echo "PROTOS_JAVA_VERSION=$PROTOS_JAVA_VERSION"
+          echo "ACTUAL_JAVA_VERSION=$actual"
+          echo "CANONICAL_JAVA_RUNTIME=PASS"
 
       - name: Build locked Protos runtime
         working-directory: protos-source
