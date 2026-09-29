@@ -7,21 +7,31 @@ extension. The canonical Protos language, specification, parser, resolver and
 runtime remain owned by the
 [`guillermomolina/protos`](https://github.com/guillermomolina/protos) repository.
 
-## Source authority
+## Protos runtime authority
 
-This repository consumes the canonical Protos implementation at an exact,
-explicit Git revision.
+This repository consumes an official published Protos runtime for real Run/Debug
+acceptance. It does not build Protos from source as part of the extension
+pipeline.
 
-The consumed revision is recorded in
+The exact published runtime identity is recorded in
 [`protos-source.lock.json`](protos-source.lock.json):
 
 ```text
-repository = guillermomolina/protos
-revision  = 43f883b9f244c635311c9e2a049b1b3cf65bae93
+repository      = guillermomolina/protos
+source revision = 0336ae20216bf2eec17854bea0f6435e4e1e9b19
+release tag     = v0.3.116
+release asset   = protos-0.3.116-native-linux-x86_64.zip
+asset sha256    = 61fd90b39a43c574900b3c61d4fe2e65e100166ced66e495281b336f934883e8
+graalvm release = 25.4.4.1.1
 ```
 
-The lock file is the authority for the Protos source revision used by the
-extension CI and release pipeline.
+For acceptance, the lock is the authority for both the exact Protos source
+identity and the immutable published Native artifact that carries it.
+
+`scripts/install_locked_protos_runtime.py` downloads that asset from the
+official GitHub Release, verifies its SHA-256, verifies `SOURCE.txt` and
+`RUNTIME.txt`, and exposes its `bin/protos` launcher to the packaged extension
+acceptance tests.
 
 The extension must remain a thin editor integration. It must not become a
 second implementation of the Protos language or runtime.
@@ -210,24 +220,35 @@ APL-1.0 licensing terms and required third-party notices.
 GitHub Actions in this repository own the complete VS Code extension
 validation and distribution pipeline.
 
-The pipeline consumes the exact Protos revision from
-`protos-source.lock.json` and validates the resulting packaged product.
+The pipeline consumes the exact published Protos Native runtime from
+`protos-source.lock.json` and validates the resulting packaged product against
+that immutable runtime artifact.
 
 The intended pipeline is:
 
 ```text
 protos-source.lock.json
-          ↓
-      package
-          ↓
- canonical VSIX artifact
-          ↓
- clean VS Code installation
-          ↓
-       real Run
-          ↓
-      real Debug
+          │
+          ├───────────────┐
+          ▼               ▼
+      package       GitHub Release
+          │           v0.3.116
+          ▼               │
+ canonical VSIX           ▼
+     artifact       verified Native
+          │            runtime
+          └───────┬───────┘
+                  ▼
+         clean VS Code install
+                  ↓
+               real Run
+                  ↓
+              real Debug
 ```
+
+The Run/Debug acceptance path does not checkout or compile Protos and does not
+install a separate Java/GraalVM runtime. It exercises the already-published
+Native distribution directly.
 
 The canonical VSIX is produced once and then reused by the downstream
 validation jobs. The downstream jobs must test the same packaged artifact that
@@ -241,7 +262,9 @@ workflow run. They are not committed to this repository.
 A successful CI run must establish all of the following:
 
 ```text
-exact Protos source revision
+exact published Protos runtime
+        +
+exact Protos source identity carried by that runtime
         +
 exact npm dependency lock
         +
@@ -249,13 +272,13 @@ deterministic package assets
         +
 deterministic VSIX canonicalization
         =
-reproducible VSIX artifact
+reproducible VSIX artifact + reproducible acceptance runtime
 ```
 
-Changing the pinned Protos revision, extension source, dependency lock,
-packaging inputs or package assets must therefore produce a corresponding
-artifact change or an explicit, reviewable reason why the semantic package
-content remains unchanged.
+Changing the pinned Protos release/runtime identity, extension source,
+dependency lock, packaging inputs or package assets must therefore produce a
+corresponding artifact or acceptance change, or an explicit reviewable reason
+why the semantic result remains unchanged.
 
 ## Issue tracking
 
@@ -288,7 +311,7 @@ The repository boundary is intentionally:
 guillermomolina/protos
     canonical language/runtime source
                 │
-                │ exact Git revision
+                │ published release artifact
                 ▼
 guillermomolina/protos-vscode-extension
     editor integration
@@ -298,8 +321,8 @@ guillermomolina/protos-vscode-extension
     distribution
 ```
 
-The dependency therefore flows from the canonical language/runtime repository
-to the editor product repository.
+The dependency therefore flows through the official Protos distribution
+boundary rather than through a second source build in the editor repository.
 
 The extension repository must not copy or fork the Protos runtime merely to
 make the editor pipeline self-contained.

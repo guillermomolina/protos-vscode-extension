@@ -399,7 +399,7 @@ async function activate(context) {
         trustDisposable
     );
 
-    await languageServerController.start();
+    void languageServerController.start();
 }
 
 async function deactivate() {

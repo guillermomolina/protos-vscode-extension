@@ -13,6 +13,9 @@ GRAMMAR = ROOT / "syntaxes" / "protos.tmLanguage.json"
 EXTENSION = ROOT / "extension.js"
 DEBUG_ADAPTER = ROOT / "debug_adapter.js"
 PROTOS_SOURCE_LOCK = ROOT / "protos-source.lock.json"
+PROTOS_RUNTIME_INSTALLER = (
+    ROOT / "scripts" / "install_locked_protos_runtime.py"
+)
 README = ROOT / "README.md"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "vscode-extension-ci.yaml"
 
@@ -49,25 +52,102 @@ def main():
     try:
         readme = README.read_text(encoding="utf-8")
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+        runtime_installer = PROTOS_RUNTIME_INSTALLER.read_text(
+            encoding="utf-8"
+        )
     except OSError as exc:
         fail(str(exc))
 
     if source_lock.get("repository") != "guillermomolina/protos":
-        fail("Protos source lock repository authority changed")
+        fail("Protos runtime lock repository authority changed")
 
     revision = source_lock.get("revision")
     if (
         not isinstance(revision, str)
         or re.fullmatch(r"[0-9a-f]{40}", revision) is None
     ):
-        fail("Protos source lock revision must be an exact 40-hex SHA")
+        fail("Protos runtime lock revision must be an exact 40-hex SHA")
+
+    release_version = source_lock.get("release_version")
+    if (
+        not isinstance(release_version, str)
+        or re.fullmatch(
+            r"[0-9]+\.[0-9]+\.[0-9]+",
+            release_version,
+        ) is None
+    ):
+        fail("Protos runtime lock release_version is not canonical")
+
+    release_tag = source_lock.get("release_tag")
+    if release_tag != "v" + release_version:
+        fail("Protos runtime lock release tag/version mismatch")
+
+    release_asset = source_lock.get("release_asset")
+    expected_asset = (
+        "protos-%s-native-linux-x86_64.zip"
+        % release_version
+    )
+    if release_asset != expected_asset:
+        fail("Protos runtime lock Native asset identity changed")
+
+    release_asset_sha256 = source_lock.get(
+        "release_asset_sha256"
+    )
+    if (
+        not isinstance(release_asset_sha256, str)
+        or re.fullmatch(
+            r"[0-9a-f]{64}",
+            release_asset_sha256,
+        ) is None
+    ):
+        fail(
+            "Protos runtime lock asset SHA-256 must be exact"
+        )
+
+    graalvm_release = source_lock.get("graalvm_release")
+    if (
+        not isinstance(graalvm_release, str)
+        or not graalvm_release
+    ):
+        fail("Protos runtime lock GraalVM release is missing")
+
+    expected_lock_fields = {
+        "native_runtime_kind":
+            "graalvm-native-image-truffle",
+        "target_os": "linux",
+        "target_arch": "x86_64",
+        "libc_family": "glibc",
+        "libc_abi_min": "2.39",
+    }
+
+    for key, expected in expected_lock_fields.items():
+        if source_lock.get(key) != expected:
+            fail(
+                "Protos runtime lock %s changed: %r"
+                % (key, source_lock.get(key))
+            )
 
     readme_authority = (
-        "repository = guillermomolina/protos\n"
-        "revision  = %s" % revision
+        "repository      = guillermomolina/protos\n"
+        "source revision = %s\n"
+        "release tag     = %s\n"
+        "release asset   = %s\n"
+        "asset sha256    = %s\n"
+        "graalvm release = %s"
+        % (
+            revision,
+            release_tag,
+            release_asset,
+            release_asset_sha256,
+            graalvm_release,
+        )
     )
+
     if readme_authority not in readme:
-        fail("README Protos source authority must agree with the source lock")
+        fail(
+            "README published Protos runtime authority "
+            "must agree with the lock"
+        )
 
     expected_scalar = {
         "name": "protos",
@@ -341,41 +421,85 @@ def main():
         if forbidden in extension or forbidden in debug_adapter:
             fail("editor must not cross the approved debugger boundary: " + forbidden)
 
-    required_toolchain_markers = (
-        "id: protos-toolchain",
-        'fs.readFileSync("protos-source/toolchain.json", "utf8")',
-        "graalvm.distribution",
-        "graalvm.jdk_feature",
-        "graalvm.jdk_version",
-        "graalvm.release",
-        "graal_components",
-        "release !== componentsVersion",
-        "versionFeature !== jdkFeature",
-        "uses: actions/setup-java@v5",
-        "distribution: ${{ steps.protos-toolchain.outputs.distribution }}",
-        "java-version: ${{ steps.protos-toolchain.outputs.jdk_version }}",
-        "PROTOS_JAVA_VERSION: ${{ steps.protos-toolchain.outputs.jdk_version }}",
-        "CANONICAL_JAVA_RUNTIME=PASS",
+    required_installer_markers = (
+        "hashlib.sha256()",
+        "urllib.request.urlopen(request)",
+        "archive.testzip()",
+        '"SOURCE.txt"',
+        '"RUNTIME.txt"',
+        '"source_revision": lock["revision"]',
+        '"graalvm_release": lock["graalvm_release"]',
+        '"external_java_required": "false"',
+        '"/releases/download/"',
+        '"release_asset_sha256"',
     )
+
+    for marker in required_installer_markers:
+        if marker not in runtime_installer:
+            fail(
+                "published-runtime installer missing "
+                "authority marker: "
+                + marker
+            )
+
+    required_runtime_job_markers = (
+        "- name: Install locked published Protos runtime",
+        "id: protos-runtime",
+        "scripts/install_locked_protos_runtime.py",
+        "${{ steps.protos-runtime.outputs.runtime }}",
+    )
+
+    forbidden_source_build_markers = (
+        "Checkout locked Protos source",
+        "Verify locked Protos revision",
+        "Read locked Protos toolchain",
+        "Build locked Protos runtime",
+        "actions/setup-java@",
+        "protos-source/bin/protos",
+        "working-directory: protos-source",
+        "toolchain.json",
+        "mvn -q -DskipTests package",
+    )
+
     for job_name in ("real-run", "real-debug"):
         job = workflow_job(workflow, job_name)
-        for marker in required_toolchain_markers:
+
+        for marker in required_runtime_job_markers:
             if marker not in job:
                 fail(
-                    "%s must derive canonical Java from the locked Protos "
-                    "toolchain: %s" % (job_name, marker)
+                    "%s must consume the locked published "
+                    "Protos runtime: %s"
+                    % (job_name, marker)
                 )
-        if "distribution: temurin" in job:
-            fail(
-                "%s must not use Temurin for canonical Protos acceptance"
-                % job_name
-            )
-        if 'ref: ${{ steps.protos-lock.outputs.revision }}' not in job:
-            fail("%s must checkout the exact locked Protos revision" % job_name)
 
-    print("DIST006_B2_CI_TOOLCHAIN_AUTHORITY_VALIDATION: PASS")
-    print("PROTOS_SOURCE_LOCK=" + revision)
-    print("PROTOS_TOOLCHAIN_SOURCE=LOCKED_PROTOS_TOOLCHAIN_JSON")
+        for marker in forbidden_source_build_markers:
+            if marker in job:
+                fail(
+                    "%s must not rebuild Protos for "
+                    "acceptance: %s"
+                    % (job_name, marker)
+                )
+
+    print(
+        "DIST006_B2_CI_PUBLISHED_RUNTIME_"
+        "AUTHORITY_VALIDATION: PASS"
+    )
+    print("PROTOS_SOURCE_REVISION=" + revision)
+    print("PROTOS_RELEASE_TAG=" + release_tag)
+    print("PROTOS_RELEASE_ASSET=" + release_asset)
+    print(
+        "PROTOS_RELEASE_ASSET_SHA256="
+        + release_asset_sha256
+    )
+    print(
+        "PROTOS_GRAALVM_RELEASE="
+        + graalvm_release
+    )
+    print(
+        "PROTOS_RUNTIME_SOURCE="
+        "PUBLISHED_NATIVE_RELEASE"
+    )
+    print("PROTOS_EXTERNAL_JAVA_REQUIRED=NO")
     print("LM009_B_EXTENSION_VALIDATION: PASS")
     print("LM009_C_RUN_WIRING_VALIDATION: PASS")
     print("LM009_E_DEBUG_WIRING_VALIDATION: PASS")

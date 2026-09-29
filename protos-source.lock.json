@@ -1,5 +1,15 @@
 {
   "repository": "guillermomolina/protos",
-  "revision": "43f883b9f244c635311c9e2a049b1b3cf65bae93",
-  "authority": "canonical Protos source revision used to build the VS Code extension"
+  "revision": "0336ae20216bf2eec17854bea0f6435e4e1e9b19",
+  "release_version": "0.3.116",
+  "release_tag": "v0.3.116",
+  "release_asset": "protos-0.3.116-native-linux-x86_64.zip",
+  "release_asset_sha256": "61fd90b39a43c574900b3c61d4fe2e65e100166ced66e495281b336f934883e8",
+  "graalvm_release": "25.4.4.1.1",
+  "native_runtime_kind": "graalvm-native-image-truffle",
+  "target_os": "linux",
+  "target_arch": "x86_64",
+  "libc_family": "glibc",
+  "libc_abi_min": "2.39",
+  "authority": "canonical published Protos runtime used by VS Code extension acceptance"
 }
