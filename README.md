@@ -18,10 +18,10 @@ The exact published runtime identity is recorded in
 
 ```text
 repository      = guillermomolina/protos
-source revision = 0336ae20216bf2eec17854bea0f6435e4e1e9b19
-release tag     = v0.3.116
-release asset   = protos-0.3.116-native-linux-x86_64.zip
-asset sha256    = 61fd90b39a43c574900b3c61d4fe2e65e100166ced66e495281b336f934883e8
+source revision = 3895206897ddac795dfebd49709ca97f8d0908b1
+release tag     = v0.3.139
+release asset   = protos-0.3.139-native-linux-x86_64.zip
+asset sha256    = 8e87dfc410c6a49f194786f205ba434f0b5b60865873e99e18ded8aba66c46da
 graalvm release = 25.4.4.1.1
 ```
 
@@ -232,7 +232,7 @@ protos-source.lock.json
           ├───────────────┐
           ▼               ▼
       package       GitHub Release
-          │           v0.3.116
+          │           v0.3.139
           ▼               │
  canonical VSIX           ▼
      artifact       verified Native
