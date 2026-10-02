@@ -2,9 +2,23 @@ const fs = require("fs");
 const path = require("path");
 const vscode = require("vscode");
 
+function loadHarnessConfig() {
+  const configPath =
+    process.env.PROTOS_I3_CONFIG || "/tmp/protos-vscode-i3a.json";
+
+  if (!fs.existsSync(configPath)) {
+    return {};
+  }
+
+  return JSON.parse(fs.readFileSync(configPath, "utf8"));
+}
+
 async function activate() {
-  const resultPath = process.env.PROTOS_I3_RESULT;
-  const fixturePath = process.env.PROTOS_I3_FIXTURE;
+  const config = loadHarnessConfig();
+  const resultPath =
+    process.env.PROTOS_I3_RESULT || config.resultPath;
+  const fixturePath =
+    process.env.PROTOS_I3_FIXTURE || config.fixturePath;
 
   const result = {
     status: "running",

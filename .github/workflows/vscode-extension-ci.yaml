@@ -151,6 +151,22 @@ jobs:
         run: |
           printf 'print("clean-install")\n' > "$PROTOS_I3_FIXTURE"
 
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          config = {
+              "resultPath": os.environ["PROTOS_I3_RESULT"],
+              "fixturePath": os.environ["PROTOS_I3_FIXTURE"],
+          }
+
+          Path("/tmp/protos-vscode-i3a.json").write_text(
+              json.dumps(config, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
           xvfb-run -a code \
             --user-data-dir "$RUNNER_TEMP/vscode-clean/user-data" \
             --extensions-dir "$RUNNER_TEMP/vscode-clean/extensions" \
