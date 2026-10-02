@@ -5,6 +5,7 @@
         "context": ".."
     },
     "remoteUser": "node",
+    "postCreateCommand": "npm ci",
     "customizations": {
         "vscode": {
             "extensions": [

@@ -2,9 +2,11 @@
 # The exact allowed shipping set is enforced by test/validate_vsix.py.
 .vscodeignore
 .devcontainer/**
+.vscode-test/**
 .github/**
 .gitignore
 AGENTS.md
+Makefile
 LICENSE.TXT
 extension.js
 debug_adapter.js

@@ -138,11 +138,13 @@
     "test:debug": "node test/debug_integration.test.js",
     "test:lsp": "node test/language_server_integration.test.js",
     "test": "npm run test:build && npm run test:grammar && npm run test:contract && npm run test:packaging && npm run test:run && npm run test:debug && npm run test:lsp",
+    "test:acceptance": "node scripts/test_acceptance.js",
     "package:vsix": "vsce package --no-dependencies",
     "package:vsix:canonical": "node scripts/canonicalize_vsix.js",
     "test:vsix": "rm -f /tmp/protos-vscode-extension.vsix && npm run package:vsix -- --out /tmp/protos-vscode-extension.vsix && python3 test/validate_vsix.py /tmp/protos-vscode-extension.vsix && python3 test/validate_reproducibility.py /tmp/protos-vscode-extension.vsix"
   },
   "devDependencies": {
+    "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "3.9.2",
     "esbuild": "0.28.2",
     "yauzl": "^3.4.0",

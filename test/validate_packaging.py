@@ -17,6 +17,7 @@ EXPECTED_DEPENDENCIES = {
     "vscode-languageclient": "10.1.1",
 }
 EXPECTED_DEV_DEPENDENCIES = {
+    "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "3.9.2",
     "esbuild": "0.28.2",
     "yauzl": "^3.4.0",
@@ -46,6 +47,7 @@ EXPECTED_SCRIPTS = {
         "npm run test:debug && "
         "npm run test:lsp"
     ),
+    "test:acceptance": "node scripts/test_acceptance.js",
     "package:vsix": "vsce package --no-dependencies",
     "package:vsix:canonical": "node scripts/canonicalize_vsix.js",
     "test:vsix": (
@@ -65,9 +67,11 @@ EXPECTED_VSCODEIGNORE = """# LM009-I1-B explicit package boundary.
 # The exact allowed shipping set is enforced by test/validate_vsix.py.
 .vscodeignore
 .devcontainer/**
+.vscode-test/**
 .github/**
 .gitignore
 AGENTS.md
+Makefile
 LICENSE.TXT
 extension.js
 debug_adapter.js

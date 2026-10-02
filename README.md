@@ -98,6 +98,18 @@ Install the exact dependency set recorded in the lockfile:
 npm ci
 ```
 
+Run the complete repository test authority:
+
+```sh
+make test
+```
+
+`make test` runs the historical repository baseline through `npm test`, then
+runs the installed-VSIX acceptance through `npm run test:acceptance`. The
+acceptance path packages and canonicalizes the VSIX, installs the locked
+published Protos runtime, installs the actual VSIX into pinned VS Code
+`1.140.0`, and validates clean installation, real Run, and real Debug.
+
 Build the production extension bundle:
 
 ```sh
@@ -217,45 +229,42 @@ APL-1.0 licensing terms and required third-party notices.
 
 ## Continuous integration
 
-GitHub Actions in this repository own the complete VS Code extension
-validation and distribution pipeline.
+GitHub Actions use the same repository test authority as local development.
+The workflow builds the committed devcontainer and executes exactly:
 
-The pipeline consumes the exact published Protos Native runtime from
-`protos-source.lock.json` and validates the resulting packaged product against
-that immutable runtime artifact.
-
-The intended pipeline is:
-
-```text
-protos-source.lock.json
-          │
-          ├───────────────┐
-          ▼               ▼
-      package       GitHub Release
-          │           v0.3.139
-          ▼               │
- canonical VSIX           ▼
-     artifact       verified Native
-          │            runtime
-          └───────┬───────┘
-                  ▼
-         clean VS Code install
-                  ↓
-               real Run
-                  ↓
-              real Debug
+```sh
+make test
 ```
 
-The Run/Debug acceptance path does not checkout or compile Protos and does not
-install a separate Java/GraalVM runtime. It exercises the already-published
-Native distribution directly.
+The workflow does not maintain separate implementations of packaging,
+clean-install, Run, or Debug acceptance.
 
-The canonical VSIX is produced once and then reused by the downstream
-validation jobs. The downstream jobs must test the same packaged artifact that
-would be distributed, rather than rebuilding separate VSIX copies.
+The authority is layered as:
 
-CI artifacts are stored as GitHub Actions artifacts associated with the
-workflow run. They are not committed to this repository.
+```text
+make test
+    │
+    ├── npm test
+    │     repository baseline
+    │
+    └── npm run test:acceptance
+          │
+          ├── package + validate canonical VSIX
+          ├── install exact published Protos Native runtime
+          ├── clean installed-extension acceptance
+          ├── real Run acceptance
+          └── real Debug acceptance
+```
+
+The acceptance path consumes the exact published Protos Native runtime from
+`protos-source.lock.json`; it does not checkout or compile Protos and does not
+install a separate Java/GraalVM runtime.
+
+The same acceptance run produces `protos-vscode.vsix` and
+`protos-vscode.vsix.sha256`. After `make test` succeeds, GitHub Actions uploads
+those files as the canonical workflow artifact. CI therefore validates and
+publishes the artifact produced by the same repository authority instead of
+rebuilding a second VSIX in downstream jobs.
 
 ## Reproducibility
 

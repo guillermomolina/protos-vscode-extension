@@ -203,6 +203,7 @@ def main():
             "npm run test:debug && "
             "npm run test:lsp"
         ),
+        "test:acceptance": "node scripts/test_acceptance.js",
         "package:vsix": "vsce package --no-dependencies",
         "package:vsix:canonical": "node scripts/canonicalize_vsix.js",
         "test:vsix": (
@@ -217,6 +218,7 @@ def main():
         fail("D127/I1-A/B build scripts changed")
 
     expected_dev_dependencies = {
+        "@vscode/test-electron": "3.1.0",
         "@vscode/vsce": "3.9.2",
         "esbuild": "0.28.2",
         "yauzl": "^3.4.0",
@@ -442,48 +444,65 @@ def main():
                 + marker
             )
 
-    required_runtime_job_markers = (
-        "- name: Install locked published Protos runtime",
-        "id: protos-runtime",
-        "scripts/install_locked_protos_runtime.py",
-        "${{ steps.protos-runtime.outputs.runtime }}",
+    required_workflow_markers = (
+        "  test:\n",
+        "uses: actions/checkout@v5",
+        "fetch-depth: 0",
+        "uses: devcontainers/ci@v0.3",
+        "push: never",
+        "runCmd: make test",
+        "uses: actions/upload-artifact@v4",
+        "protos-vscode.vsix",
+        "protos-vscode.vsix.sha256",
     )
 
-    forbidden_source_build_markers = (
-        "Checkout locked Protos source",
-        "Verify locked Protos revision",
-        "Read locked Protos toolchain",
-        "Build locked Protos runtime",
-        "actions/setup-java@",
-        "protos-source/bin/protos",
-        "working-directory: protos-source",
-        "toolchain.json",
-        "mvn -q -DskipTests package",
+    for marker in required_workflow_markers:
+        if marker not in workflow:
+            fail(
+                "CI workflow missing repository-authority marker: "
+                + marker
+            )
+
+    if workflow.count(
+        "uses: devcontainers/ci@v0.3"
+    ) != 1:
+        fail(
+            "CI must have exactly one devcontainer execution authority"
+        )
+
+    if workflow.count("runCmd: make test") != 1:
+        fail(
+            "CI must execute make test exactly once"
+        )
+
+    forbidden_workflow_markers = (
+        "  package:\n",
+        "  clean-install:\n",
+        "  real-run:\n",
+        "  real-debug:\n",
+        "actions/setup-node@",
+        "actions/setup-python@",
+        "npm test",
+        "update.code.visualstudio.com/latest",
+        "clean_install_make_vsix.py",
+        "clean_run_make_vsix.py",
+        "debug_harness_make_vsix.py",
+        "install_locked_protos_runtime.py",
     )
 
-    for job_name in ("real-run", "real-debug"):
-        job = workflow_job(workflow, job_name)
-
-        for marker in required_runtime_job_markers:
-            if marker not in job:
-                fail(
-                    "%s must consume the locked published "
-                    "Protos runtime: %s"
-                    % (job_name, marker)
-                )
-
-        for marker in forbidden_source_build_markers:
-            if marker in job:
-                fail(
-                    "%s must not rebuild Protos for "
-                    "acceptance: %s"
-                    % (job_name, marker)
-                )
+    for marker in forbidden_workflow_markers:
+        if marker in workflow:
+            fail(
+                "CI duplicates repository test authority: "
+                + marker
+            )
 
     print(
-        "DIST006_B2_CI_PUBLISHED_RUNTIME_"
+        "DIST006_B2_CI_REPOSITORY_"
         "AUTHORITY_VALIDATION: PASS"
     )
+    print("CI_TEST_AUTHORITY=make test")
+    print("CI_EXECUTION_ENVIRONMENT=devcontainer")
     print("PROTOS_SOURCE_REVISION=" + revision)
     print("PROTOS_RELEASE_TAG=" + release_tag)
     print("PROTOS_RELEASE_ASSET=" + release_asset)

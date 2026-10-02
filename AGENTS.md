@@ -60,10 +60,16 @@ Extension issues must not silently broaden into language/runtime semantic decisi
 
 ## Validation
 
-The repository's primary local test interface is:
+The repository's complete local and CI test authority is:
 
 ```sh
-npm test
+make test
 ```
 
-Packaging and VSIX validation are separate product checks and must remain reproducible from the committed dependency lock and `protos-source.lock.json`.
+`make test` runs the existing repository baseline (`npm test`) followed by the
+installed-VSIX acceptance (`npm run test:acceptance`). CI must invoke this same
+authority from the repository devcontainer rather than duplicate the acceptance
+logic in workflow YAML.
+
+Packaging and VSIX validation remain reproducible from the committed dependency
+lock and `protos-source.lock.json`.
