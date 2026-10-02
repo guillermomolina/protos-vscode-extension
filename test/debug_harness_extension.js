@@ -13,10 +13,47 @@ function scalarValueString(variable) {
   return String(variable.value);
 }
 
+function sourcePathMatchesFixture(sourcePath, fixturePath) {
+  if (typeof sourcePath !== "string" || sourcePath.length === 0) {
+    return false;
+  }
+
+  let candidate = sourcePath;
+
+  try {
+    if (sourcePath.includes("://")) {
+      const uri = vscode.Uri.parse(sourcePath);
+      candidate = uri.path;
+    }
+  } catch (_) {
+    return false;
+  }
+
+  return path.resolve(candidate) === path.resolve(fixturePath);
+}
+
+function loadHarnessConfig() {
+  const configPath =
+    process.env.PROTOS_I3C_CONFIG || "/tmp/protos-vscode-i3c.json";
+
+  if (!fs.existsSync(configPath)) {
+    return {};
+  }
+
+  return JSON.parse(fs.readFileSync(configPath, "utf8"));
+}
+
 async function activate() {
-  const resultPath = process.env.PROTOS_I3C_RESULT;
-  const fixturePath = process.env.PROTOS_I3C_FIXTURE;
-  const runtime = process.env.PROTOS_I3C_RUNTIME;
+  const config = loadHarnessConfig();
+  const quitWhenFinished =
+    config.quitWhenFinished !== false &&
+    Boolean(process.env.PROTOS_I3C_RESULT);
+  const resultPath =
+    process.env.PROTOS_I3C_RESULT || config.resultPath;
+  const fixturePath =
+    process.env.PROTOS_I3C_FIXTURE || config.fixturePath;
+  const runtime =
+    process.env.PROTOS_I3C_RUNTIME || config.runtime;
 
   const result = {
     status: "running",
@@ -26,6 +63,9 @@ async function activate() {
     stoppedAtBreakpoint: false,
     stackFramesObserved: 0,
     sourceLocationMatches: false,
+    observedTopFrameLine: null,
+    observedTopFrameSourcePath: null,
+    observedNextFrameLine: null,
     scopesObserved: 0,
     localsObserved: false,
     expectedLocalValueObserved: false,
@@ -36,6 +76,98 @@ async function activate() {
   };
 
   let finished = false;
+
+  const stoppedEvents = [];
+  const emptySetBreakpointsAcks = [];
+  const pendingEmptySetBreakpoints = new Map();
+
+  const trackerDisposable =
+    vscode.debug.registerDebugAdapterTrackerFactory("protos", {
+      createDebugAdapterTracker(trackedSession) {
+        return {
+          onWillReceiveMessage(message) {
+            if (
+              message &&
+              message.type === "request" &&
+              message.command === "setBreakpoints" &&
+              message.arguments &&
+              Array.isArray(message.arguments.breakpoints) &&
+              message.arguments.breakpoints.length === 0
+            ) {
+              pendingEmptySetBreakpoints.set(
+                message.seq,
+                trackedSession.id
+              );
+            }
+          },
+
+          onDidSendMessage(message) {
+            if (
+              message &&
+              message.type === "event" &&
+              message.event === "stopped"
+            ) {
+              stoppedEvents.push({
+                sessionId: trackedSession.id,
+                message
+              });
+            }
+
+            if (
+              message &&
+              message.type === "response" &&
+              message.command === "setBreakpoints" &&
+              message.success === true &&
+              pendingEmptySetBreakpoints.has(message.request_seq)
+            ) {
+              emptySetBreakpointsAcks.push({
+                sessionId:
+                  pendingEmptySetBreakpoints.get(message.request_seq),
+                message
+              });
+              pendingEmptySetBreakpoints.delete(message.request_seq);
+            }
+          }
+        };
+      }
+    });
+
+  const stoppedCount = (sessionId) =>
+    stoppedEvents.filter((event) => event.sessionId === sessionId).length;
+
+  const emptySetBreakpointsAckCount = (sessionId) =>
+    emptySetBreakpointsAcks.filter(
+      (event) => event.sessionId === sessionId
+    ).length;
+
+  const waitForStoppedCount = async (sessionId, expectedCount) => {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      if (stoppedCount(sessionId) >= expectedCount) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    throw new Error(
+      "step next did not produce a subsequent DAP stopped event"
+    );
+  };
+
+  const waitForEmptySetBreakpointsAck = async (
+    sessionId,
+    expectedCount
+  ) => {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      if (emptySetBreakpointsAckCount(sessionId) >= expectedCount) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    throw new Error(
+      "breakpoint removal was not acknowledged by the DAP adapter"
+    );
+  };
 
   const writeResult = () => {
     fs.mkdirSync(path.dirname(resultPath), { recursive: true });
@@ -51,7 +183,9 @@ async function activate() {
     finished = true;
     writeResult();
     await new Promise((resolve) => setTimeout(resolve, 700));
-    await vscode.commands.executeCommand("workbench.action.quit");
+    if (quitWhenFinished) {
+      await vscode.commands.executeCommand("workbench.action.quit");
+    }
   };
 
   try {
@@ -159,10 +293,15 @@ async function activate() {
     result.stackFramesObserved = stackResponse.stackFrames.length;
 
     const top = stackResponse.stackFrames[0];
+    result.observedTopFrameLine =
+      Number.isInteger(top.line) ? top.line : null;
+    result.observedTopFrameSourcePath =
+      top.source && top.source.path ? top.source.path : null;
+
     if (
       top.source &&
       top.source.path &&
-      path.resolve(top.source.path) === path.resolve(fixturePath) &&
+      sourcePathMatchesFixture(top.source.path, fixturePath) &&
       Number.isInteger(top.line) &&
       top.line === 2
     ) {
@@ -206,31 +345,45 @@ async function activate() {
       }
     }
 
+    const breakpointRemovalAcksBefore =
+      emptySetBreakpointsAckCount(session.id);
+
+    vscode.debug.removeBreakpoints([breakpoint]);
+
+    await waitForEmptySetBreakpointsAck(
+      session.id,
+      breakpointRemovalAcksBefore + 1
+    );
+
+    const stoppedBeforeNext = stoppedCount(session.id);
+
     await session.customRequest("next", {
-      threadId,
-      singleThread: true
+      threadId
     });
 
-    for (let attempt = 0; attempt < 60; attempt++) {
-      const nextStack = await session.customRequest("stackTrace", {
-        threadId,
-        startFrame: 0,
-        levels: 1
-      });
-      const nextTop =
-        nextStack &&
-        Array.isArray(nextStack.stackFrames) &&
-        nextStack.stackFrames[0];
-      if (nextTop && nextTop.line && nextTop.line !== top.line) {
-        result.nextCompleted = true;
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    await waitForStoppedCount(
+      session.id,
+      stoppedBeforeNext + 1
+    );
+
+    const nextStack = await session.customRequest("stackTrace", {
+      threadId,
+      startFrame: 0,
+      levels: 1
+    });
+
+    const nextTop =
+      nextStack &&
+      Array.isArray(nextStack.stackFrames) &&
+      nextStack.stackFrames[0];
+
+    if (nextTop && Number.isInteger(nextTop.line)) {
+      result.observedNextFrameLine = nextTop.line;
+      result.nextCompleted = nextTop.line === 3;
     }
 
     await session.customRequest("continue", {
-      threadId,
-      singleThread: false
+      threadId
     });
     result.continueCompleted = true;
 
@@ -270,6 +423,8 @@ async function activate() {
       error instanceof Error ? error.message : String(error)
     );
   } finally {
+    trackerDisposable.dispose();
+
     vscode.debug.removeBreakpoints(
       vscode.debug.breakpoints.filter(
         (bp) => bp.location && bp.location.uri && bp.location.uri.fsPath === path.resolve(fixturePath)

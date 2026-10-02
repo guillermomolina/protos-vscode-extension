@@ -2,10 +2,28 @@ const fs = require("fs");
 const path = require("path");
 const vscode = require("vscode");
 
+function loadHarnessConfig() {
+  const configPath =
+    process.env.PROTOS_I3B_CONFIG || "/tmp/protos-vscode-i3b.json";
+
+  if (!fs.existsSync(configPath)) {
+    return {};
+  }
+
+  return JSON.parse(fs.readFileSync(configPath, "utf8"));
+}
+
 async function activate() {
-  const resultPath = process.env.PROTOS_I3B_RESULT;
-  const fixturePath = process.env.PROTOS_I3B_FIXTURE;
-  const runtime = process.env.PROTOS_I3B_RUNTIME;
+  const config = loadHarnessConfig();
+  const quitWhenFinished =
+    config.quitWhenFinished !== false &&
+    Boolean(process.env.PROTOS_I3B_RESULT);
+  const resultPath =
+    process.env.PROTOS_I3B_RESULT || config.resultPath;
+  const fixturePath =
+    process.env.PROTOS_I3B_FIXTURE || config.fixturePath;
+  const runtime =
+    process.env.PROTOS_I3B_RUNTIME || config.runtime;
 
   const result = {
     status: "running",
@@ -25,7 +43,9 @@ async function activate() {
     fs.mkdirSync(path.dirname(resultPath), { recursive: true });
     fs.writeFileSync(resultPath, JSON.stringify(result, null, 2) + "\n", "utf8");
     await new Promise((resolve) => setTimeout(resolve, 500));
-    await vscode.commands.executeCommand("workbench.action.quit");
+    if (quitWhenFinished) {
+      await vscode.commands.executeCommand("workbench.action.quit");
+    }
   };
 
   const disposable = vscode.tasks.onDidEndTaskProcess(async (event) => {
