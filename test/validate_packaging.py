@@ -12,14 +12,14 @@ PACKAGE = ROOT / "package.json"
 LOCK = ROOT / "package-lock.json"
 BUNDLE = ROOT / "dist" / "extension.js"
 GITIGNORE = REPO / ".gitignore"
-EXPECTED_EXTENSION_VERSION = "0.2.0"
+EXPECTED_EXTENSION_VERSION = "0.2.1"
 
 EXPECTED_DEPENDENCIES = {
     "vscode-languageclient": "10.1.1",
 }
 EXPECTED_DEV_DEPENDENCIES = {
     "@vscode/test-electron": "3.1.0",
-    "@vscode/vsce": "3.9.2",
+    "@vscode/vsce": "4.0.0",
     "esbuild": "0.28.2",
     "yauzl": "^3.4.0",
     "yazl": "^2.5.1",
@@ -178,7 +178,7 @@ def main():
     print("VSCODE_MODULE=EXTERNAL_HOST_PROVIDED")
     print("PRODUCTION_ENTRY=dist/extension.js")
     print("BUILD_TOOL_ESBUILD=0.28.2")
-    print("PACKAGE_TOOL_VSCE=3.9.2")
+    print("PACKAGE_TOOL_VSCE=4.0.0")
     print("PRODUCTION_NODE_MODULES_IN_VSIX_POLICY=NO")
     print("PROTOS_RUNTIME_IN_VSIX=NO")
     print("PACKAGE_LICENSE=license.txt")

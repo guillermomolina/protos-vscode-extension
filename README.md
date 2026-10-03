@@ -53,7 +53,7 @@ Those responsibilities remain in the canonical Protos repository.
 extension id:    guillermomolina.protos
 extension name:  protos
 publisher:       guillermomolina
-extension ver.:  0.2.0
+extension ver.:  0.2.1
 engines.vscode:  ^1.104.0
 language id:     protos
 file extension:  .protos

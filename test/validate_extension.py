@@ -152,7 +152,7 @@ def main():
     expected_scalar = {
         "name": "protos",
         "displayName": "Protos",
-        "version": "0.2.0",
+        "version": "0.2.1",
         "publisher": "guillermomolina",
         "license": "APL-1.0",
         "main": "./dist/extension.js",
@@ -221,7 +221,7 @@ def main():
 
     expected_dev_dependencies = {
         "@vscode/test-electron": "3.1.0",
-        "@vscode/vsce": "3.9.2",
+        "@vscode/vsce": "4.0.0",
         "esbuild": "0.28.2",
         "yauzl": "^3.4.0",
         "yazl": "^2.5.1",
@@ -525,7 +525,7 @@ def main():
     print("LM009_C_RUN_WIRING_VALIDATION: PASS")
     print("LM009_E_DEBUG_WIRING_VALIDATION: PASS")
     print("EXTENSION_ID=guillermomolina.protos")
-    print("EXTENSION_VERSION=0.2.0")
+    print("EXTENSION_VERSION=0.2.1")
     print("ENGINES_VSCODE=^1.104.0")
     print("EXTENSION_KIND=workspace")
     print("RUNTIME_BOUNDARY=EXTERNAL_PROTOS_LAUNCHER")
