@@ -12,6 +12,7 @@ PACKAGE = ROOT / "package.json"
 LOCK = ROOT / "package-lock.json"
 BUNDLE = ROOT / "dist" / "extension.js"
 GITIGNORE = REPO / ".gitignore"
+EXPECTED_EXTENSION_VERSION = "0.2.0"
 
 EXPECTED_DEPENDENCIES = {
     "vscode-languageclient": "10.1.1",
@@ -35,6 +36,7 @@ EXPECTED_SCRIPTS = {
     "test:grammar": "python3 test/validate_grammar.py",
     "test:contract": "python3 test/validate_extension.py",
     "test:packaging": "python3 test/validate_packaging.py",
+    "test:release-version": "python3 test/validate_release_version.py",
     "test:run": "node test/run_current_file.test.js",
     "test:debug": "node test/debug_integration.test.js",
     "test:lsp": "node test/language_server_integration.test.js",
@@ -43,6 +45,7 @@ EXPECTED_SCRIPTS = {
         "npm run test:grammar && "
         "npm run test:contract && "
         "npm run test:packaging && "
+        "npm run test:release-version && "
         "npm run test:run && "
         "npm run test:debug && "
         "npm run test:lsp"
@@ -98,6 +101,11 @@ def main():
     package = load(PACKAGE)
     lock = load(LOCK)
 
+    if package.get("version") != EXPECTED_EXTENSION_VERSION:
+        fail("package.json extension version must be " + EXPECTED_EXTENSION_VERSION)
+    if lock.get("version") != EXPECTED_EXTENSION_VERSION:
+        fail("package-lock top-level version must match extension version")
+
     if package.get("main") != "./dist/extension.js":
         fail("production extension entry must be ./dist/extension.js")
     if package.get("dependencies") != EXPECTED_DEPENDENCIES:
@@ -112,6 +120,8 @@ def main():
     root = lock.get("packages", {}).get("")
     if not isinstance(root, dict):
         fail("package-lock root package metadata missing")
+    if root.get("version") != EXPECTED_EXTENSION_VERSION:
+        fail("package-lock root package version must match extension version")
     if root.get("dependencies") != EXPECTED_DEPENDENCIES:
         fail("package-lock runtime dependencies differ from package.json")
     if root.get("devDependencies") != EXPECTED_DEV_DEPENDENCIES:

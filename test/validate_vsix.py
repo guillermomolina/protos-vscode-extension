@@ -5,6 +5,9 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+EXPECTED_EXTENSION_NAME = "protos"
+EXPECTED_EXTENSION_PUBLISHER = "guillermomolina"
+EXPECTED_EXTENSION_VERSION = "0.2.0"
 
 EXPECTED_EXTENSION_FILES = {
     "extension/readme.md",
@@ -70,12 +73,23 @@ def main():
                 fail("packaged THIRD_PARTY_NOTICES.txt differs from package root")
 
             package = json.loads(archive.read("extension/package.json").decode("utf-8"))
+            if package.get("name") != EXPECTED_EXTENSION_NAME:
+                fail("packaged extension name changed")
+            if package.get("publisher") != EXPECTED_EXTENSION_PUBLISHER:
+                fail("packaged extension publisher changed")
+            if package.get("version") != EXPECTED_EXTENSION_VERSION:
+                fail(
+                    "packaged extension version must be "
+                    + EXPECTED_EXTENSION_VERSION
+                )
             if package.get("main") != "./dist/extension.js":
                 fail("packaged production entry changed")
     except (OSError, zipfile.BadZipFile, KeyError, json.JSONDecodeError) as exc:
         fail(str(exc))
 
     print("LM009_I1B_VSIX_VALIDATION: PASS")
+    print("EXTENSION_ID=guillermomolina.protos")
+    print("EXTENSION_VERSION=" + EXPECTED_EXTENSION_VERSION)
     print("PACKAGE_CONTENT_BOUNDED=YES")
     print("LICENSE_PACKAGED=YES")
     print("THIRD_PARTY_NOTICES_PACKAGED=YES")

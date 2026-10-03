@@ -34,6 +34,9 @@ const CANONICAL_SHA =
 const VSCODE_VERSION =
   "1.140.0";
 
+const EXTENSION_INSTALL_ID =
+  "guillermomolina.protos@0.2.0";
+
 
 function commandText(command, args) {
   return [command, ...args]
@@ -421,16 +424,21 @@ async function runScenario(
       .split(/\r?\n/)
       .some(
         (line) =>
-          line.startsWith(
-            "guillermomolina.protos@"
-          )
+          line.trim() ===
+          EXTENSION_INSTALL_ID
       )
   ) {
     throw new Error(
-      "packaged Protos extension " +
-      "was not installed"
+      "expected packaged Protos extension " +
+      EXTENSION_INSTALL_ID +
+      " was not installed"
     );
   }
+
+  console.log(
+    "INSTALLED_EXTENSION_IDENTITY=" +
+    EXTENSION_INSTALL_ID
+  );
 
   const launchArgs = [
     "-a",

@@ -152,7 +152,7 @@ def main():
     expected_scalar = {
         "name": "protos",
         "displayName": "Protos",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "publisher": "guillermomolina",
         "license": "APL-1.0",
         "main": "./dist/extension.js",
@@ -191,6 +191,7 @@ def main():
         "test:grammar": "python3 test/validate_grammar.py",
         "test:contract": "python3 test/validate_extension.py",
         "test:packaging": "python3 test/validate_packaging.py",
+        "test:release-version": "python3 test/validate_release_version.py",
         "test:run": "node test/run_current_file.test.js",
         "test:debug": "node test/debug_integration.test.js",
         "test:lsp": "node test/language_server_integration.test.js",
@@ -199,6 +200,7 @@ def main():
             "npm run test:grammar && "
             "npm run test:contract && "
             "npm run test:packaging && "
+            "npm run test:release-version && "
             "npm run test:run && "
             "npm run test:debug && "
             "npm run test:lsp"
@@ -523,7 +525,7 @@ def main():
     print("LM009_C_RUN_WIRING_VALIDATION: PASS")
     print("LM009_E_DEBUG_WIRING_VALIDATION: PASS")
     print("EXTENSION_ID=guillermomolina.protos")
-    print("EXTENSION_VERSION=0.1.0")
+    print("EXTENSION_VERSION=0.2.0")
     print("ENGINES_VSCODE=^1.104.0")
     print("EXTENSION_KIND=workspace")
     print("RUNTIME_BOUNDARY=EXTERNAL_PROTOS_LAUNCHER")
