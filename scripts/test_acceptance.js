@@ -290,7 +290,7 @@ function writeScenarioConfig(
 async function runScenario(
   vscodeExecutablePath,
   vscodeCliPath,
-  runtime,
+  lockedRuntime,
   spec
 ) {
   console.log(
@@ -355,6 +355,42 @@ async function runScenario(
     }
   );
 
+  let scenarioRuntime =
+    lockedRuntime;
+
+  if (
+    spec.runtimeKind ===
+    "formatting-test-server"
+  ) {
+    scenarioRuntime =
+      path.join(
+        scenarioRoot,
+        "formatting-fake-server.py"
+      );
+
+    fs.copyFileSync(
+      path.join(
+        ROOT,
+        "test",
+        "formatting_fake_server.py"
+      ),
+      scenarioRuntime
+    );
+
+    fs.chmodSync(
+      scenarioRuntime,
+      0o755
+    );
+  } else if (
+    spec.runtimeKind !== undefined &&
+    spec.runtimeKind !== "locked-runtime"
+  ) {
+    throw new Error(
+      "unknown acceptance runtime kind: " +
+      String(spec.runtimeKind)
+    );
+  }
+
   fs.writeFileSync(
     fixturePath,
     spec.fixture,
@@ -365,7 +401,7 @@ async function runScenario(
     spec,
     resultPath,
     fixturePath,
-    runtime
+    scenarioRuntime
   );
 
   run(
@@ -695,6 +731,25 @@ async function main() {
         'print("done")\n',
       timeoutMilliseconds:
         120000
+    },
+    {
+      name: "real-formatting",
+      heading:
+        "REAL FORMAT DOCUMENT / FORMAT ON SAVE",
+      makeHarness:
+        "formatting_harness_make_vsix.py",
+      validator:
+        "formatting_harness_validate.py",
+      configPath:
+        "/tmp/protos-vscode-lm011-d2.json",
+      fixtureName:
+        "formatting_fixture.protos",
+      fixture:
+        "value: 1\n",
+      timeoutMilliseconds:
+        90000,
+      runtimeKind:
+        "formatting-test-server"
     }
   ];
 
