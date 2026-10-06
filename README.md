@@ -18,10 +18,10 @@ The exact published runtime identity is recorded in
 
 ```text
 repository      = guillermomolina/protos
-source revision = 3895206897ddac795dfebd49709ca97f8d0908b1
-release tag     = v0.3.139
-release asset   = protos-0.3.139-native-linux-x86_64.zip
-asset sha256    = 8e87dfc410c6a49f194786f205ba434f0b5b60865873e99e18ded8aba66c46da
+source revision = f627734c8feaf3c26c4a32903b6ea0e25f4a9956
+release tag     = v0.3.237
+release asset   = protos-0.3.237-native-linux-x86_64.zip
+asset sha256    = 510537c7c47a323ed05a5ea8e4e46bc3cd63c761a58e68cb0639548feb8cc46c
 graalvm release = 25.4.4.1.1
 ```
 
@@ -53,7 +53,7 @@ Those responsibilities remain in the canonical Protos repository.
 extension id:    guillermomolina.protos
 extension name:  protos
 publisher:       guillermomolina
-extension ver.:  0.2.1
+extension ver.:  0.2.2
 engines.vscode:  ^1.104.0
 language id:     protos
 file extension:  .protos
@@ -84,6 +84,8 @@ The current extension provides the following integration surfaces:
 - `Protos: Run Current File`;
 - Protos debugging through VS Code's Debug Adapter Protocol integration;
 - Protos language-server client integration;
+- whole-document formatting through the standard LSP `textDocument/formatting`
+  path, with canonical formatting owned by the configured Protos runtime;
 - local and VS Code Remote workspace support where the corresponding Protos
   launcher is available in the workspace extension host.
 
@@ -108,7 +110,9 @@ make test
 runs the installed-VSIX acceptance through `npm run test:acceptance`. The
 acceptance path packages and canonicalizes the VSIX, installs the locked
 published Protos runtime, installs the actual VSIX into pinned VS Code
-`1.140.0`, and validates clean installation, real Run, and real Debug.
+`1.140.0`, and validates clean installation, real Run, real Debug, the
+existing deterministic formatting-protocol scenario, and real released-runtime
+Format Document / format-on-save behaviour.
 
 Build the production extension bundle:
 
@@ -253,7 +257,9 @@ make test
           ├── install exact published Protos Native runtime
           ├── clean installed-extension acceptance
           ├── real Run acceptance
-          └── real Debug acceptance
+          ├── real Debug acceptance
+          ├── deterministic formatting-protocol acceptance
+          └── real released-runtime formatting acceptance
 ```
 
 The acceptance path consumes the exact published Protos Native runtime from

@@ -7,5 +7,5 @@
     "vscode": "^1.104.0"
   },
   "main": "./extension.js",
-  "activationEvents": ["*"]
+  "activationEvents": ["onStartupFinished"]
 }

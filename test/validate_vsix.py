@@ -7,7 +7,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_EXTENSION_NAME = "protos"
 EXPECTED_EXTENSION_PUBLISHER = "guillermomolina"
-EXPECTED_EXTENSION_VERSION = "0.2.1"
+EXPECTED_EXTENSION_VERSION = "0.2.2"
 
 EXPECTED_EXTENSION_FILES = {
     "extension/readme.md",

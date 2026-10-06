@@ -12,7 +12,7 @@ PACKAGE = ROOT / "package.json"
 LOCK = ROOT / "package-lock.json"
 BUNDLE = ROOT / "dist" / "extension.js"
 GITIGNORE = REPO / ".gitignore"
-EXPECTED_EXTENSION_VERSION = "0.2.1"
+EXPECTED_EXTENSION_VERSION = "0.2.2"
 
 EXPECTED_DEPENDENCIES = {
     "vscode-languageclient": "10.1.1",

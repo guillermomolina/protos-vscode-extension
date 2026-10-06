@@ -35,7 +35,7 @@ const VSCODE_VERSION =
   "1.140.0";
 
 const EXTENSION_INSTALL_ID =
-  "guillermomolina.protos@0.2.1";
+  "guillermomolina.protos@0.2.2";
 
 
 function commandText(command, args) {
@@ -273,7 +273,16 @@ function writeScenarioConfig(
   const config = {
     resultPath,
     fixturePath,
-    quitWhenFinished: false
+    quitWhenFinished: false,
+    mode: spec.formattingMode || null,
+    unsavedSource:
+      spec.unsavedSource || null,
+    unsavedExpected:
+      spec.unsavedExpected || null,
+    saveSource:
+      spec.saveSource || null,
+    saveExpected:
+      spec.saveExpected || null
   };
 
   if (runtime) {
@@ -396,6 +405,46 @@ async function runScenario(
     spec.fixture,
     "utf8"
   );
+
+  /*
+   * Formatting acceptance must start with the standard VS Code formatting
+   * policy already loaded by the workspace. Updating editor.formatOnSave and
+   * immediately saving from the harness races VS Code's save participants:
+   * the extension host may observe the new configuration before the workbench
+   * format-on-save participant does.
+   *
+   * Preconfigure the workspace exactly as a user would instead. The harness
+   * still verifies the effective configuration and registers no formatter of
+   * its own.
+   */
+  if (
+    spec.name === "real-formatting"
+  ) {
+    const workspaceSettingsPath =
+      path.join(
+        scenarioRoot,
+        ".vscode",
+        "settings.json"
+      );
+
+    fs.mkdirSync(
+      path.dirname(workspaceSettingsPath),
+      {
+        recursive: true
+      }
+    );
+
+    writeJson(
+      workspaceSettingsPath,
+      {
+        "[protos]": {
+          "editor.defaultFormatter":
+            "guillermomolina.protos",
+          "editor.formatOnSave": true
+        }
+      }
+    );
+  }
 
   writeScenarioConfig(
     spec,
@@ -656,6 +705,18 @@ async function main() {
     ]
   );
 
+  run(
+    "python3",
+    [
+      path.join(
+        ROOT,
+        "test",
+        "released_formatter_acceptance.py"
+      ),
+      runtime
+    ]
+  );
+
   process.chdir(ROOT);
 
   const vscodeExecutablePath =
@@ -733,9 +794,9 @@ async function main() {
         120000
     },
     {
-      name: "real-formatting",
+      name: "formatting-protocol",
       heading:
-        "REAL FORMAT DOCUMENT / FORMAT ON SAVE",
+        "DETERMINISTIC FORMAT DOCUMENT PROTOCOL",
       makeHarness:
         "formatting_harness_make_vsix.py",
       validator:
@@ -750,6 +811,35 @@ async function main() {
         90000,
       runtimeKind:
         "formatting-test-server"
+    },
+    {
+      name: "real-formatting",
+      heading:
+        "REAL RELEASED RUNTIME FORMAT DOCUMENT / FORMAT ON SAVE",
+      makeHarness:
+        "formatting_harness_make_vsix.py",
+      validator:
+        "formatting_real_harness_validate.py",
+      configPath:
+        "/tmp/protos-vscode-lm011-d2.json",
+      fixtureName:
+        "formatting_fixture.protos",
+      fixture:
+        "diskValue: 9\n",
+      timeoutMilliseconds:
+        120000,
+      runtimeKind:
+        "locked-runtime",
+      formattingMode:
+        "real",
+      unsavedSource:
+        "value:1",
+      unsavedExpected:
+        "value: 1\n",
+      saveSource:
+        "saved:2",
+      saveExpected:
+        "saved: 2\n"
     }
   ];
 

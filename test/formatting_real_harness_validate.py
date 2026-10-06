@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 from pathlib import Path
 import json
 import sys
@@ -6,7 +7,8 @@ import sys
 
 if len(sys.argv) != 2:
     raise RuntimeError(
-        "usage: formatting_harness_validate.py <result.json>"
+        "usage: formatting_real_harness_validate.py "
+        "<result.json>"
     )
 
 data = json.loads(
@@ -24,14 +26,17 @@ checks = {
     "serverReady": True,
 
     "formatDocumentCommandCompleted": True,
-    "formatRequestObserved": True,
     "formatDocumentResultExact": True,
     "unsavedBufferFormatting": True,
+    "diskUnchangedDuringUnsavedFormatting": True,
 
+    "formatOnSaveEnabled": True,
+    "formatOnSaveResultExact": True,
+    "diskContentCanonicalAfterSave": True,
 
     "extensionDevelopmentPathUsed": False,
-    "testServerUsed": True,
-    "realTool010Runtime": False,
+    "testServerUsed": False,
+    "realTool010Runtime": True,
     "independentTypescriptFormatter": False,
 }
 
@@ -40,7 +45,7 @@ for key, expected in checks.items():
 
     if actual != expected:
         raise RuntimeError(
-            "LM011_D2_FORMATTING_FAILED: "
+            "LM011_E_REAL_FORMATTING_FAILED: "
             "%s=%r expected %r"
             % (
                 key,
@@ -49,48 +54,30 @@ for key, expected in checks.items():
             )
         )
 
-request_count = data.get(
-    "formatRequestCount"
-)
-
-if (
-    not isinstance(request_count, int) or
-    request_count < 1
-):
-    raise RuntimeError(
-        "LM011_D2_FORMATTING_FAILED: "
-        "formatRequestCount=%r expected >= 1"
-        % request_count
-    )
-
 print(
-    "LM011_D2_INSTALLED_VSIX_FORMAT_DOCUMENT=PASS"
+    "LM011_E_INSTALLED_PACKAGED_EXTENSION=PASS"
 )
 print(
-    "LM011_D2_UNSAVED_BUFFER_FORMATTING=PASS"
+    "LM011_E_FORMAT_DOCUMENT=PASS"
 )
 print(
-    "LM011_D2_SCOPE=FORMAT_DOCUMENT_PROTOCOL_ONLY"
+    "LM011_E_UNSAVED_BUFFER_FORMATTING=PASS"
 )
 print(
-    "LM011_D2_FORMAT_ON_SAVE_AUTHORITY=REAL_RUNTIME_E2E"
+    "LM011_E_FORMAT_ON_SAVE=PASS"
 )
 print(
-    "STANDARD_LSP_FORMATTING_REQUEST_OBSERVED=YES"
-)
-print(
-    "FORMAT_REQUEST_COUNT=%d"
-    % request_count
-)
-print(
-    "INDEPENDENT_TYPESCRIPT_FORMATTER=NO"
+    "LM011_E_DISK_CONTENT_CANONICAL_AFTER_SAVE=PASS"
 )
 print(
     "EXTENSION_DEVELOPMENT_PATH_USED=NO"
 )
 print(
-    "TEST_SERVER_RUNTIME=YES"
+    "TEST_SERVER_RUNTIME_FOR_FINAL_E2E=NO"
 )
 print(
-    "REAL_TOOL010_RUNTIME=NO"
+    "REAL_TOOL010_RUNTIME=YES"
+)
+print(
+    "PRODUCT_TYPESCRIPT_FORMATTER=NO"
 )

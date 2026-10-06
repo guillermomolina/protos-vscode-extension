@@ -140,9 +140,346 @@ async function replaceDocumentText(
 }
 
 
+
+async function activateReal(config) {
+  const resultPath =
+    config.resultPath;
+
+  const fixturePath =
+    config.fixturePath;
+
+  const runtime =
+    config.runtime;
+
+  const unsavedSource =
+    config.unsavedSource;
+
+  const unsavedExpected =
+    config.unsavedExpected;
+
+  const saveSource =
+    config.saveSource;
+
+  const saveExpected =
+    config.saveExpected;
+
+  const result = {
+    status: "running",
+
+    extensionFound: false,
+    extensionActivated: false,
+    languageId: null,
+
+    runtimeConfigured: false,
+    serverReady: false,
+
+    formatDocumentCommandCompleted: false,
+    formatDocumentResultExact: false,
+    unsavedBufferFormatting: false,
+    diskUnchangedDuringUnsavedFormatting: false,
+
+    formatOnSaveEnabled: false,
+    formatOnSaveResultExact: false,
+    diskContentCanonicalAfterSave: false,
+
+    extensionDevelopmentPathUsed: false,
+    testServerUsed: false,
+    realTool010Runtime: true,
+    independentTypescriptFormatter: false,
+
+    error: null
+  };
+
+  const writeResult = () => {
+    if (!resultPath) {
+      throw new Error(
+        "LM011-E result path is missing"
+      );
+    }
+
+    fs.mkdirSync(
+      path.dirname(resultPath),
+      {
+        recursive: true
+      }
+    );
+
+    fs.writeFileSync(
+      resultPath,
+      JSON.stringify(
+        result,
+        null,
+        2
+      ) + "\n",
+      "utf8"
+    );
+  };
+
+  try {
+    if (
+      !resultPath ||
+      !fixturePath ||
+      !runtime ||
+      !unsavedSource ||
+      !unsavedExpected ||
+      !saveSource ||
+      !saveExpected
+    ) {
+      throw new Error(
+        "LM011-E harness configuration is incomplete"
+      );
+    }
+
+    if (!fs.existsSync(runtime)) {
+      throw new Error(
+        "LM011-E locked runtime does not exist: " +
+        runtime
+      );
+    }
+
+    const diskBeforeUnsaved =
+      fs.readFileSync(
+        fixturePath,
+        "utf8"
+      );
+
+    await vscode.workspace
+      .getConfiguration("protos")
+      .update(
+        "runtime.executable",
+        runtime,
+        vscode.ConfigurationTarget.Global
+      );
+
+    result.runtimeConfigured = true;
+
+    const extension =
+      vscode.extensions.getExtension(
+        "guillermomolina.protos"
+      );
+
+    result.extensionFound =
+      Boolean(extension);
+
+    if (!extension) {
+      throw new Error(
+        "guillermomolina.protos is not installed"
+      );
+    }
+
+    const document =
+      await vscode.workspace.openTextDocument(
+        vscode.Uri.file(fixturePath)
+      );
+
+    const editor =
+      await vscode.window.showTextDocument(
+        document
+      );
+
+    result.languageId =
+      document.languageId;
+
+    if (result.languageId !== "protos") {
+      throw new Error(
+        "fixture did not resolve to Protos language"
+      );
+    }
+
+    await extension.activate();
+
+    result.extensionActivated =
+      extension.isActive;
+
+    await replaceDocumentText(
+      editor,
+      unsavedSource
+    );
+
+    if (!document.isDirty) {
+      throw new Error(
+        "LM011-E unsaved fixture unexpectedly became clean"
+      );
+    }
+
+    await waitFor(
+      async () => {
+        await vscode.commands.executeCommand(
+          "editor.action.formatDocument"
+        );
+
+        return (
+          document.getText() ===
+          unsavedExpected
+        );
+      },
+      "released-runtime Format Document TextEdit application",
+      60000
+    );
+
+    result.formatDocumentCommandCompleted =
+      true;
+
+    result.serverReady = true;
+
+    result.formatDocumentResultExact =
+      document.getText() ===
+      unsavedExpected;
+
+    result.diskUnchangedDuringUnsavedFormatting =
+      fs.readFileSync(
+        fixturePath,
+        "utf8"
+      ) === diskBeforeUnsaved;
+
+    result.unsavedBufferFormatting =
+      document.isDirty &&
+      result.formatDocumentResultExact &&
+      result.diskUnchangedDuringUnsavedFormatting;
+
+    const editorConfiguration =
+      vscode.workspace.getConfiguration(
+        "editor",
+        document.uri
+      );
+
+    await editorConfiguration.update(
+      "defaultFormatter",
+      "guillermomolina.protos",
+      vscode.ConfigurationTarget.Workspace,
+      true
+    );
+
+    await editorConfiguration.update(
+      "formatOnSave",
+      true,
+      vscode.ConfigurationTarget.Workspace,
+      true
+    );
+
+    const effectiveConfiguration =
+      vscode.workspace.getConfiguration(
+        "editor",
+        document.uri
+      );
+
+    result.formatOnSaveEnabled =
+      effectiveConfiguration.get(
+        "formatOnSave"
+      ) === true &&
+      effectiveConfiguration.get(
+        "defaultFormatter"
+      ) === "guillermomolina.protos";
+
+    if (!result.formatOnSaveEnabled) {
+      throw new Error(
+        "LM011-E language-specific formatOnSave "
+        + "configuration is not active"
+      );
+    }
+
+    await replaceDocumentText(
+      editor,
+      saveSource
+    );
+
+    if (!document.isDirty) {
+      throw new Error(
+        "LM011-E formatOnSave fixture unexpectedly became clean"
+      );
+    }
+
+    await vscode.commands.executeCommand(
+      "workbench.action.files.save"
+    );
+
+    await waitFor(
+      () =>
+        document.getText() ===
+          saveExpected &&
+        document.isDirty === false,
+      "released-runtime formatOnSave TextEdit and save completion",
+      60000
+    );
+
+    await waitFor(
+      () =>
+        fs.existsSync(fixturePath) &&
+        fs.readFileSync(
+          fixturePath,
+          "utf8"
+        ) === saveExpected,
+      "released-runtime canonical formatted content on disk",
+      60000
+    );
+
+    result.formatOnSaveResultExact =
+      document.getText() ===
+      saveExpected;
+
+    result.diskContentCanonicalAfterSave =
+      fs.readFileSync(
+        fixturePath,
+        "utf8"
+      ) === saveExpected;
+
+    if (!result.extensionActivated) {
+      throw new Error(
+        "installed Protos extension did not activate"
+      );
+    }
+
+    if (!result.formatDocumentResultExact) {
+      throw new Error(
+        "released-runtime Format Document result was not exact"
+      );
+    }
+
+    if (!result.unsavedBufferFormatting) {
+      throw new Error(
+        "released-runtime Format Document did not "
+        + "operate on the unsaved buffer"
+      );
+    }
+
+    if (!result.formatOnSaveResultExact) {
+      throw new Error(
+        "released-runtime formatOnSave result was not exact"
+      );
+    }
+
+    if (!result.diskContentCanonicalAfterSave) {
+      throw new Error(
+        "released-runtime formatOnSave did not "
+        + "persist canonical text"
+      );
+    }
+
+    result.status = "pass";
+  } catch (error) {
+    result.status = "fail";
+    result.error =
+      error instanceof Error
+        ? error.stack || error.message
+        : String(error);
+  }
+
+  writeResult();
+
+  if (result.status !== "pass") {
+    throw new Error(result.error);
+  }
+}
+
+
 async function activate() {
   const config =
     loadHarnessConfig();
+
+  if (config.mode === "real") {
+    await activateReal(config);
+    return;
+  }
 
   const resultPath =
     process.env.PROTOS_LM011_D2_RESULT ||
@@ -384,119 +721,18 @@ async function activate() {
       );
 
     /*
-     * Enable language-specific standard VS Code format-on-save behaviour.
-     * The harness registers no formatter itself.
+     * D2 stops here deliberately.
+     *
+     * Its authority is the deterministic installed-VSIX protocol boundary:
+     * an unsaved Protos buffer must produce the standard
+     * textDocument/formatting request and receive the expected TextEdit.
+     *
+     * Format-on-save belongs to LM011-E's real released-runtime E2E, where
+     * VS Code exercises the actual language server and TOOL010. Duplicating
+     * that assertion against the fake protocol server made D2 depend on
+     * workbench save-participant startup ordering and therefore flaky.
      */
-    const editorConfiguration =
-      vscode.workspace.getConfiguration(
-        "editor",
-        document.uri
-      );
-
-    await editorConfiguration.update(
-      "defaultFormatter",
-      "guillermomolina.protos",
-      vscode.ConfigurationTarget.Workspace,
-      true
-    );
-
-    await editorConfiguration.update(
-      "formatOnSave",
-      true,
-      vscode.ConfigurationTarget.Workspace,
-      true
-    );
-
-    const effectiveConfiguration =
-      vscode.workspace.getConfiguration(
-        "editor",
-        document.uri
-      );
-
-    result.formatOnSaveEnabled =
-      effectiveConfiguration.get(
-        "formatOnSave"
-      ) === true &&
-      effectiveConfiguration.get(
-        "defaultFormatter"
-      ) === "guillermomolina.protos";
-
-    if (!result.formatOnSaveEnabled) {
-      throw new Error(
-        "language-specific formatOnSave configuration is not active"
-      );
-    }
-
-    await replaceDocumentText(
-      editor,
-      "value:1"
-    );
-
-    if (!document.isDirty) {
-      throw new Error(
-        "formatOnSave fixture unexpectedly became clean"
-      );
-    }
-
-    const beforeSave =
-      evidenceCount(
-        evidencePath,
-        "formatting"
-      );
-
-    await vscode.commands.executeCommand(
-      "workbench.action.files.save"
-    );
-
-    await waitFor(
-      () =>
-        evidenceCount(
-          evidencePath,
-          "formatting"
-        ) > beforeSave,
-      "formatOnSave textDocument/formatting request"
-    );
-
-    await waitFor(
-      () =>
-        document.getText() ===
-          "value: 1\n" &&
-        document.isDirty === false,
-      "formatOnSave TextEdit and save completion"
-    );
-
-    await waitFor(
-      () =>
-        fs.existsSync(fixturePath) &&
-        fs.readFileSync(
-          fixturePath,
-          "utf8"
-        ) === "value: 1\n",
-      "canonical formatted content on disk"
-    );
-
-    const saveRequests =
-      evidenceAfter(
-        evidencePath,
-        "formatting",
-        beforeSave
-      );
-
-    result.formatOnSaveRequestObserved =
-      saveRequests.some(
-        (entry) =>
-          entry.text === "value:1"
-      );
-
-    result.formatOnSaveResultExact =
-      document.getText() ===
-      "value: 1\n";
-
-    result.diskContentCanonicalAfterSave =
-      fs.readFileSync(
-        fixturePath,
-        "utf8"
-      ) === "value: 1\n";
+    result.formatOnSaveDelegatedToRealRuntime = true;
 
     result.formatRequestCount =
       evidenceCount(
@@ -525,24 +761,6 @@ async function activate() {
     if (!result.unsavedBufferFormatting) {
       throw new Error(
         "Format Document did not operate on the unsaved buffer"
-      );
-    }
-
-    if (!result.formatOnSaveRequestObserved) {
-      throw new Error(
-        "formatOnSave produced no LSP formatting request"
-      );
-    }
-
-    if (!result.formatOnSaveResultExact) {
-      throw new Error(
-        "formatOnSave result was not exact"
-      );
-    }
-
-    if (!result.diskContentCanonicalAfterSave) {
-      throw new Error(
-        "formatOnSave did not persist canonical text"
       );
     }
 

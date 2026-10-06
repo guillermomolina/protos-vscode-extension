@@ -1,0 +1,114 @@
+{
+  "cases": [
+    {
+      "name": "structural-whitespace-unicode-separators",
+      "source": "café:1_000;hex:0xFF\nvalue:foo( 1,2 ).bar[ 3 ]  +   -x\nitems:[1, 2,3]\nmapping:%{\"a\":1;\"b\":2}\n(a,b):source\ntarget=other\nsuper.move(x,y)",
+      "expected": "café: 1_000; hex: 0xFF\nvalue: foo(1, 2).bar[3] + -x\nitems: [1, 2, 3]\nmapping: %{ \"a\": 1; \"b\": 2 }\n(a, b): source\ntarget = other\nsuper.move(x, y)\n",
+      "preserve": [
+        "café",
+        "1_000",
+        "0xFF",
+        ";"
+      ],
+      "covers": [
+        "structural-whitespace",
+        "unicode",
+        "raw-literal",
+        "semicolon",
+        "logical-newline"
+      ]
+    },
+    {
+      "name": "objects-closures-trailing-closure",
+      "source": "object:{...base;name:\"Rex\"}\ndog:animal{name:\"Rex\"\nage:2}\nbare:x=>x+1\nparen:(y)=>y*2\nmulti:(a,b=2,...rest)=>{result:a+b\n^result}\nrun(1){first\nsecond}\nnoop:()=>{}\nmapping:%{\"a\":1\n\"b\":2}",
+      "expected": "object: { ...base; name: \"Rex\" }\ndog: animal {\n    name: \"Rex\"\n    age: 2\n}\nbare: x => x + 1\nparen: (y) => y * 2\nmulti: (a, b = 2, ...rest) => {\n    result: a + b\n    ^result\n}\nrun(1) {\n    first\n    second\n}\nnoop: () => {}\nmapping: %{\n    \"a\": 1\n    \"b\": 2\n}\n",
+      "preserve": [
+        "x =>",
+        "(y) =>",
+        "...rest",
+        "run(1)"
+      ],
+      "covers": [
+        "closure-source-form",
+        "trailing-closure",
+        "logical-newline"
+      ]
+    },
+    {
+      "name": "exact-lexical-payload",
+      "source": "'a'\n\"a\"\n\"\\\\n\"\n\"\\\\u{0A}\"\n1000\n1_000\n0xff\n0xFF\n2e3\n2E3\ncafé\n\"\"\"alpha\r\n\tbeta\n  gamma\"\"\"",
+      "expected": "'a'\n\"a\"\n\"\\\\n\"\n\"\\\\u{0A}\"\n1000\n1_000\n0xff\n0xFF\n2e3\n2E3\ncafé\n\"\"\"alpha\r\n\tbeta\n  gamma\"\"\"\n",
+      "preserve": [
+        "'a'",
+        "\"a\"",
+        "\"\\\\n\"",
+        "\"\\\\u{0A}\"",
+        "1_000",
+        "0xff",
+        "0xFF",
+        "2e3",
+        "2E3",
+        "café",
+        "\"\"\"alpha\r\n\tbeta\n  gamma\"\"\""
+      ],
+      "covers": [
+        "raw-literal",
+        "unicode"
+      ]
+    },
+    {
+      "name": "line-comments",
+      "source": "a:1 // eol  keep\ttext\n// own  keep\ttext\nb:2",
+      "expected": "a: 1 // eol  keep\ttext\n// own  keep\ttext\nb: 2\n",
+      "preserve": [
+        "// eol  keep\ttext",
+        "// own  keep\ttext"
+      ],
+      "covers": [
+        "line-comment",
+        "comment-placement",
+        "logical-newline"
+      ]
+    },
+    {
+      "name": "multiline-block-comment-before-trailing-closure",
+      "source": "foo() /* comment\nstill  comment\t*/ {body()}",
+      "expected": "foo() /* comment\nstill  comment\t*/ { body() }\n",
+      "preserve": [
+        "/* comment\nstill  comment\t*/"
+      ],
+      "covers": [
+        "block-comment",
+        "comment-placement",
+        "trailing-closure"
+      ]
+    },
+    {
+      "name": "embedded-block-comment",
+      "source": "foo /* embedded  keep\ttext */+bar",
+      "expected": "foo /* embedded  keep\ttext */ + bar\n",
+      "preserve": [
+        "/* embedded  keep\ttext */"
+      ],
+      "covers": [
+        "block-comment",
+        "comment-placement"
+      ]
+    },
+    {
+      "name": "explicit-grouping",
+      "source": "group:(1+2)",
+      "expected": "group: (1 + 2)\n",
+      "preserve": [
+        "(1 + 2)"
+      ],
+      "covers": [
+        "explicit-grouping",
+        "structural-whitespace"
+      ]
+    }
+  ],
+  "invalid": {
+    "source": "foo("
+  }
+}

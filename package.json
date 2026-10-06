@@ -3,7 +3,7 @@
   "displayName": "Protos",
   "description": "Language support for the Protos programming language.",
   "icon": "icon.png",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "guillermomolina",
   "license": "APL-1.0",
   "repository": {
