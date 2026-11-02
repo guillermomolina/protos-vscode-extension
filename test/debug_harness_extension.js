@@ -55,6 +55,9 @@ async function activate() {
   const runtime =
     process.env.PROTOS_I3C_RUNTIME || config.runtime;
 
+  const expectedLocalValue =
+    config.ci002ExpectedLocalValue || "41";
+
   const result = {
     status: "running",
     extensionFound: false,
@@ -339,7 +342,7 @@ async function activate() {
           result.localsObserved = true;
           const x = variables.variables.find((v) => v.name === "x");
           result.expectedLocalValueObserved =
-            scalarValueString(x) === "41";
+            scalarValueString(x) === expectedLocalValue;
           break;
         }
       }
@@ -407,7 +410,7 @@ async function activate() {
       throw new Error("activation-local x was not observed");
     }
     if (!result.expectedLocalValueObserved) {
-      throw new Error("debugger value for x was not 41");
+      throw new Error("debugger value for x was not " + expectedLocalValue);
     }
     if (!result.nextCompleted) {
       throw new Error("step next did not reach a subsequent source line");

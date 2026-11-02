@@ -472,9 +472,113 @@ async function activateReal(config) {
 }
 
 
+async function activateCi002Diagnostics(config) {
+  const result = {
+    status: "running",
+    kind: config.ci002Kind,
+    realRuntime: true,
+    cases: [],
+    error: null
+  };
+
+  try {
+    if (!config.runtime || !Array.isArray(config.cases) ||
+        !config.cases.length || !fs.existsSync(config.runtime)) {
+      throw new Error("Invalid CI002 runtime or cases");
+    }
+
+    await vscode.workspace.getConfiguration("protos").update(
+      "runtime.executable",
+      config.runtime,
+      vscode.ConfigurationTarget.Global
+    );
+
+    const doc = await vscode.workspace.openTextDocument(
+      vscode.Uri.file(config.fixturePath)
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const ext = vscode.extensions.getExtension("guillermomolina.protos");
+
+    if (!ext || doc.languageId !== "protos") {
+      throw new Error("Installed Protos VSIX unavailable");
+    }
+
+    let events = 0;
+    const listener = vscode.languages.onDidChangeDiagnostics(event => {
+      if (event.uris.some(uri => uri.toString() === doc.uri.toString())) {
+        events++;
+      }
+    });
+
+    try {
+      await ext.activate();
+      if (!ext.isActive) throw new Error("VSIX did not activate");
+
+      for (const c of config.cases) {
+        const errors = () => vscode.languages.getDiagnostics(doc.uri)
+          .filter(d => d.severity === vscode.DiagnosticSeverity.Error
+            && d.source === "protos");
+
+        const before = events;
+        await replaceDocumentText(editor, c.invalid);
+        await waitFor(
+          () => events > before && errors().length > 0,
+          c.id + " parser error"
+        );
+
+        if (errors().length !== 1) {
+          throw new Error(c.id + ": expected one parser error");
+        }
+
+        const r = errors()[0].range;
+        const actual = [
+          r.start.line, r.start.character,
+          r.end.line, r.end.character
+        ];
+
+        if (c.range && JSON.stringify(actual) !== JSON.stringify(c.range)) {
+          throw new Error(c.id + ": unexpected diagnostic range "
+            + JSON.stringify(actual));
+        }
+
+        const beforeRepair = events;
+        await replaceDocumentText(editor, c.valid);
+        await waitFor(
+          () => events > beforeRepair &&
+            vscode.languages.getDiagnostics(doc.uri).length === 0,
+          c.id + " diagnostic recovery"
+        );
+
+        result.cases.push({ id: c.id, status: "PASS", range: actual });
+      }
+    } finally {
+      listener.dispose();
+    }
+
+    result.status = "pass";
+  } catch (error) {
+    result.status = "fail";
+    result.error = String(error.stack || error);
+  }
+
+  fs.mkdirSync(path.dirname(config.resultPath), { recursive: true });
+  fs.writeFileSync(
+    config.resultPath,
+    JSON.stringify(result, null, 2) + "\n"
+  );
+
+  if (result.status !== "pass") throw new Error(result.error);
+}
+
+
 async function activate() {
   const config =
     loadHarnessConfig();
+
+  if (config.mode === "ci002-diagnostics") {
+    await activateCi002Diagnostics(config);
+    return;
+  }
 
   if (config.mode === "real") {
     await activateReal(config);

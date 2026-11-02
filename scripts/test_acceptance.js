@@ -13,6 +13,9 @@ const {
   resolveCliArgsFromVSCodeExecutablePath
 } = require("@vscode/test-electron");
 
+const { classifyLockedRelease } = require("./ci002_release_gate");
+const { BASELINE, FEATURES } = require("./ci002_diagnostics_cases");
+
 const ROOT =
   path.resolve(__dirname, "..");
 
@@ -35,7 +38,7 @@ const VSCODE_VERSION =
   "1.140.0";
 
 const EXTENSION_INSTALL_ID =
-  "guillermomolina.protos@0.2.3";
+  "guillermomolina.protos@0.2.4";
 
 
 function commandText(command, args) {
@@ -275,6 +278,12 @@ function writeScenarioConfig(
     fixturePath,
     quitWhenFinished: false,
     mode: spec.formattingMode || null,
+    ci002Kind: spec.ci002Kind || null,
+    ci002RunFeature:
+      spec.ci002RunFeature === true,
+    ci002ExpectedLocalValue:
+      spec.ci002ExpectedLocalValue || null,
+    cases: spec.ci002Cases || null,
     unsavedSource:
       spec.unsavedSource || null,
     unsavedExpected:
@@ -417,9 +426,7 @@ async function runScenario(
    * still verifies the effective configuration and registers no formatter of
    * its own.
    */
-  if (
-    spec.name === "real-formatting"
-  ) {
+  if (spec.formattingMode === "real") {
     const workspaceSettingsPath =
       path.join(
         scenarioRoot,
@@ -569,21 +576,61 @@ async function runScenario(
     spec.timeoutMilliseconds
   );
 
-  run(
-    "python3",
-    [
-      path.join(
-        ROOT,
-        "test",
-        spec.validator
-      ),
-      resultPath
-    ]
+  try {
+    run(
+      "python3",
+      [
+        path.join(ROOT, "test", spec.validator),
+        resultPath
+      ]
+    );
+  } catch (error) {
+    console.error("CI002_VALIDATOR_FAILED=" + spec.name);
+
+    for (const [label, filename] of [
+      ["RESULT", resultPath],
+      ["VSCODE_LOG", logPath]
+    ]) {
+      if (fs.existsSync(filename)) {
+        console.error("CI002_" + label + "_PATH=" + filename);
+        console.error(
+          fs.readFileSync(filename, "utf8").slice(-12000)
+        );
+      }
+    }
+
+    throw error;
+  }
+
+  const result = JSON.parse(
+    fs.readFileSync(resultPath, "utf8")
   );
+
+  if (result.status !== "pass") {
+    throw new Error(
+      "CI002 scenario did not pass: " + spec.name
+    );
+  }
+
+  return {
+    name: spec.name,
+    status: "PASS",
+    resultPath,
+    resultSha256: sha256File(resultPath),
+    result
+  };
 }
 
 
 async function main() {
+  const ci002Focal =
+    process.argv.length === 3 &&
+    process.argv[2] === "--ci002-lsp-baseline-only";
+
+  if (process.argv.length !== 2 && !ci002Focal) {
+    throw new Error("Unknown acceptance argument");
+  }
+
   console.log(
     "PROTOS_VSCODE_ACCEPTANCE_TEST=BEGIN"
   );
@@ -601,6 +648,26 @@ async function main() {
       "acceptance requires linux x64"
     );
   }
+
+  const ci002 = classifyLockedRelease(
+    JSON.parse(fs.readFileSync(
+      path.join(ROOT, "protos-source.lock.json"),
+      "utf8"
+    ))
+  );
+
+  console.log(
+    "CI002_REQUIRED_RELEASE=" + ci002.requiredRelease
+  );
+  console.log(
+    "CI002_LOCKED_RELEASE=" + ci002.lockedTag
+  );
+  console.log(
+    "CI002_RELEASE_GATE=" +
+    (ci002.eligibleForFeatureTests
+      ? "ELIGIBLE"
+      : "BLOCKED_RELEASE")
+  );
 
   removePath(RAW_VSIX);
   removePath(CANONICAL_VSIX);
@@ -680,6 +747,18 @@ async function main() {
     "utf8"
   );
 
+  const vsixSourceRevision = runCapture(
+    "git",
+    ["rev-parse", "HEAD"]
+  );
+
+  console.log(
+    "CI002_VSIX_SHA256=" + canonicalSha
+  );
+  console.log(
+    "CI002_VSIX_SOURCE_REVISION=" + vsixSourceRevision
+  );
+
   const runtime =
     runCapture(
       "python3",
@@ -740,6 +819,20 @@ async function main() {
     );
 
   const scenarios = [
+    {
+      name: "ci002-lsp-baseline",
+      heading: "CI002 REAL LSP DIAGNOSTICS",
+      makeHarness: "formatting_harness_make_vsix.py",
+      validator: "ci002_diagnostics_validate.py",
+      configPath: "/tmp/protos-vscode-lm011-d2.json",
+      fixtureName: "diagnostics.protos",
+      fixture: "name\\nother",
+      timeoutMilliseconds: 90000,
+      runtimeKind: "locked-runtime",
+      formattingMode: "ci002-diagnostics",
+      ci002Kind: "baseline",
+      ci002Cases: BASELINE
+    },
     {
       name: "clean-install",
       heading:
@@ -843,21 +936,216 @@ async function main() {
     }
   ];
 
-  for (const spec of scenarios) {
-    await runScenario(
-      vscodeExecutablePath,
-      vscodeCliPath,
-      runtime,
-      spec
+  if (ci002.eligibleForFeatureTests) {
+    scenarios.push({
+      name: "ci002-lsp-features",
+      heading: "CI002 RELEASED FEATURE DIAGNOSTICS",
+      makeHarness: "formatting_harness_make_vsix.py",
+      validator: "ci002_diagnostics_validate.py",
+      configPath: "/tmp/protos-vscode-lm011-d2.json",
+      fixtureName: "features.protos",
+      fixture: "name\\nother",
+      timeoutMilliseconds: 480000,
+      runtimeKind: "locked-runtime",
+      formattingMode: "ci002-diagnostics",
+      ci002Kind: "features",
+      ci002Cases: FEATURES
+    });
+
+    scenarios.push({
+      name: "ci002-format-features",
+      heading: "CI002 REAL FEATURE FORMATTING",
+      makeHarness: "formatting_harness_make_vsix.py",
+      validator: "formatting_real_harness_validate.py",
+      configPath: "/tmp/protos-vscode-lm011-d2.json",
+      fixtureName: "features-format.protos",
+      fixture: "value: 1\n",
+      timeoutMilliseconds: 120000,
+      runtimeKind: "locked-runtime",
+      formattingMode: "real",
+      unsavedSource:
+        "for(x in xs){x}\n" +
+        "for(i,0,5){i}\n" +
+        "for(i,10,0,-2){i}",
+      unsavedExpected:
+        "for(x in xs) { x }\n" +
+        "for(i, 0, 5) { i }\n" +
+        "for(i, 10, 0, -2) { i }\n",
+      saveSource:
+        "x:a~ ~b& -c\n" +
+        "f:()=>{return 1}\n" +
+        "ascending:Range(0,4)\n" +
+        "descending:InvertedRange(4,0)",
+      saveExpected:
+        "x: a ~ ~b & -c\n" +
+        "f: () => { return 1 }\n" +
+        "ascending: Range(0, 4)\n" +
+        "descending: InvertedRange(4, 0)\n"
+    });
+
+    scenarios.push({
+      name: "ci002-run-features",
+      heading: "CI002 REAL FEATURE EXECUTION",
+      makeHarness: "clean_run_make_vsix.py",
+      validator: "ci002_run_validate.py",
+      configPath: "/tmp/protos-vscode-i3b.json",
+      fixtureName: "ci002-run.protos",
+      fixture: fs.readFileSync(
+        path.join(
+          ROOT, "test", "fixtures",
+          "ci002_run_features.protos"
+        ),
+        "utf8"
+      ),
+      timeoutMilliseconds: 120000,
+      runtimeKind: "locked-runtime",
+      ci002RunFeature: true
+    });
+
+    scenarios.push({
+      name: "ci002-debug-features",
+      heading: "CI002 REAL BITWISE DEBUG",
+      makeHarness: "debug_harness_make_vsix.py",
+      validator: "debug_harness_validate.py",
+      configPath: "/tmp/protos-vscode-i3c.json",
+      fixtureName: "ci002-debug.protos",
+      fixture:
+        'x: 12 & 10\n' +
+        'print(x)\n' +
+        'print("done")\n',
+      timeoutMilliseconds: 120000,
+      runtimeKind: "locked-runtime",
+      ci002ExpectedLocalValue: "8"
+    });
+  }
+
+  const selectedScenarios = ci002Focal
+    ? scenarios.filter(
+        (spec) => spec.name === "ci002-lsp-baseline"
+      )
+    : scenarios;
+
+  if (ci002Focal && selectedScenarios.length !== 1) {
+    throw new Error("CI002 focal scenario is missing");
+  }
+
+  const requiredCi002Scenarios = [
+    "ci002-lsp-features",
+    "ci002-run-features",
+    "ci002-format-features",
+    "ci002-debug-features"
+  ];
+
+  if (!ci002Focal && ci002.eligibleForFeatureTests) {
+    const registered = new Set(
+      scenarios.map((scenario) => scenario.name)
+    );
+
+    for (const name of requiredCi002Scenarios) {
+      if (!registered.has(name)) {
+        throw new Error(
+          "CI002 missing required scenario: " + name
+        );
+      }
+    }
+  }
+
+  const scenarioResults = [];
+
+  for (const spec of selectedScenarios) {
+    scenarioResults.push(
+      await runScenario(
+        vscodeExecutablePath,
+        vscodeCliPath,
+        runtime,
+        spec
+      )
     );
   }
+
+  if (!ci002Focal && ci002.eligibleForFeatureTests) {
+    const completed = new Set(
+      scenarioResults.map((row) => row.name)
+    );
+
+    for (const name of requiredCi002Scenarios) {
+      if (!completed.has(name)) {
+        throw new Error(
+          "CI002 required scenario not completed: " + name
+        );
+      }
+    }
+  }
+
+  const ci002FinalStatus =
+    !ci002.eligibleForFeatureTests
+      ? "BLOCKED_RELEASE"
+      : ci002Focal
+        ? "NOT_RUN"
+        : "PASS";
+
+  const featureSurfaceStatus =
+    !ci002.eligibleForFeatureTests
+      ? "BLOCKED_RELEASE"
+      : ci002Focal
+        ? "NOT_RUN"
+        : "PASS";
+
+  writeJson(
+    path.join(ACCEPTANCE_ROOT, "ci002-evidence.json"),
+    {
+      schemaVersion: 1,
+      vscodeVersion: VSCODE_VERSION,
+      installedExtension: EXTENSION_INSTALL_ID,
+      vsixSourceRevision,
+      vsixSha256: canonicalSha,
+      scenarioResults,
+      baselineScenarios: scenarioResults
+        .filter((scenario) =>
+          !scenario.name.endsWith("-features")
+        )
+        .map((scenario) => scenario.name),
+      featureScenarios: scenarioResults
+        .filter((scenario) =>
+          scenario.name.endsWith("-features")
+        )
+        .map((scenario) => scenario.name),
+      baselineStatus: ci002Focal ? "NOT_RUN" : "PASS",
+      lspDiagnosticsBaseline: "PASS",
+      lspDiagnosticsFeatures:
+        featureSurfaceStatus,
+      runFeatureAcceptance:
+        featureSurfaceStatus,
+      formatFeatureAcceptance:
+        featureSurfaceStatus,
+      debugFeatureAcceptance:
+        featureSurfaceStatus,
+      ...ci002,
+      finalFeatureAcceptance: ci002FinalStatus,
+      features: ci002.features.map((feature) => ({
+        ...feature,
+        status: ci002FinalStatus
+      }))
+    }
+  );
+
+  console.log(
+    "CI002_FEATURE_ACCEPTANCE=" +
+    ci002FinalStatus
+  );
+  console.log(
+    "CI002_EVIDENCE=" +
+    path.join(ACCEPTANCE_ROOT, "ci002-evidence.json")
+  );
 
   console.log(
     "EXTENSION_DEVELOPMENT_PATH_USED=NO"
   );
 
   console.log(
-    "PROTOS_VSCODE_ACCEPTANCE_TEST=PASS"
+    ci002Focal
+      ? "PROTOS_VSCODE_ACCEPTANCE_TEST=FOCAL_PASS"
+      : "PROTOS_VSCODE_ACCEPTANCE_TEST=PASS"
   );
 }
 

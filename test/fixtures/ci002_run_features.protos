@@ -1,0 +1,92 @@
+// CI002: installed-VSIX execution assertions.
+// Semantics belong to guillermomolina/protos.
+
+Assertions: import("std:test/Assertions")
+
+// Generic for and its result.
+values: [1, 2, 3]
+generic: 0
+genericResult: for(item in values) {
+    generic = generic + item
+}
+Assertions.require(generic == 6)
+Assertions.require(genericResult === values)
+
+// Numeric and reversed for.
+numeric: 0
+for(i, 0, 5) { numeric = numeric + i }
+Assertions.require(numeric == 10)
+
+reverse: 0
+for(i, 5, 0) { reverse = reverse + i }
+Assertions.require(reverse == 15)
+
+// Explicit step, in both directions.
+stepped: 0
+for(i, 0, 10, 2) { stepped = stepped + i }
+Assertions.require(stepped == 20)
+
+backwardStep: 0
+for(i, 10, 0, -2) {
+    backwardStep = backwardStep + i
+}
+Assertions.require(backwardStep == 30)
+
+// Binder must not overwrite the outer binding.
+i: 99
+boundSum: 0
+for(i, 0, 3) { boundSum = boundSum + i }
+Assertions.require(i == 99)
+Assertions.require(boundSum == 3)
+
+// Bitwise operators and precedence.
+Assertions.require(12 & 10 == 8)
+Assertions.require(12 | 10 == 14)
+Assertions.require(12 ~ 10 == 6)
+Assertions.require(~0 == -1)
+Assertions.require(1 << 8 == 256)
+Assertions.require(16 >> 2 == 4)
+Assertions.require(1 | 6 & 3 == 3)
+
+// Contextual return and caret non-local return.
+returnValue: () => {
+    for(n, 0, 5) {
+        if(n == 3) { return n }
+    }
+    null
+}
+Assertions.require(returnValue() == 3)
+
+caretValue: () => {
+    for(n, 0, 5) {
+        if(n == 2) { ^n }
+    }
+    null
+}
+Assertions.require(caretValue() == 2)
+
+// Core Range and InvertedRange.
+ascending: Range(0, 5)
+ascendingTotal: 0
+ascending.each(n => {
+    ascendingTotal = ascendingTotal + n
+})
+Assertions.require(ascendingTotal == 10)
+
+descending: InvertedRange(5, 0)
+descendingTotal: 0
+descending.each(n => {
+    descendingTotal = descendingTotal + n
+})
+Assertions.require(descendingTotal == 15)
+Assertions.require(
+    descending.parent() === InvertedRange
+)
+
+reverseStep: 0
+descending.eachStep(-2, n => {
+    reverseStep = reverseStep * 10 + n
+})
+Assertions.require(reverseStep == 531)
+
+print("CI002_EXECUTION_ASSERTIONS_COMPLETED")

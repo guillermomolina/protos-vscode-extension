@@ -152,7 +152,7 @@ def main():
     expected_scalar = {
         "name": "protos",
         "displayName": "Protos",
-        "version": "0.2.3",
+        "version": "0.2.4",
         "publisher": "guillermomolina",
         "license": "APL-1.0",
         "main": "./dist/extension.js",
@@ -195,6 +195,7 @@ def main():
         "test:run": "node test/run_current_file.test.js",
         "test:debug": "node test/debug_integration.test.js",
         "test:lsp": "node test/language_server_integration.test.js",
+        "test:ci002": "node --test test/ci002_release_gate.test.js test/ci002_acceptance_plan.test.js",
         "test": (
             "npm run test:build && "
             "npm run test:grammar && "
@@ -203,7 +204,7 @@ def main():
             "npm run test:release-version && "
             "npm run test:run && "
             "npm run test:debug && "
-            "npm run test:lsp"
+            "npm run test:lsp && npm run test:ci002"
         ),
         "test:acceptance": "node scripts/test_acceptance.js",
         "package:vsix": "vsce package --no-dependencies",
@@ -525,7 +526,7 @@ def main():
     print("LM009_C_RUN_WIRING_VALIDATION: PASS")
     print("LM009_E_DEBUG_WIRING_VALIDATION: PASS")
     print("EXTENSION_ID=guillermomolina.protos")
-    print("EXTENSION_VERSION=0.2.3")
+    print("EXTENSION_VERSION=0.2.4")
     print("ENGINES_VSCODE=^1.104.0")
     print("EXTENSION_KIND=workspace")
     print("RUNTIME_BOUNDARY=EXTERNAL_PROTOS_LAUNCHER")

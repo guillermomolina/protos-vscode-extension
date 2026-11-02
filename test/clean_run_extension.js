@@ -25,6 +25,9 @@ async function activate() {
   const runtime =
     process.env.PROTOS_I3B_RUNTIME || config.runtime;
 
+  const ci002RunFeature =
+    config.ci002RunFeature === true;
+
   const result = {
     status: "running",
     extensionFound: false,
@@ -34,6 +37,7 @@ async function activate() {
     runCommandRegistered: false,
     taskStarted: false,
     taskProcessExitCode: null,
+    ci002RunInvocationMatched: false,
     error: null
   };
 
@@ -57,6 +61,34 @@ async function activate() {
       : "";
     if (taskName !== "Run Current Protos File") {
       return;
+    }
+
+    if (ci002RunFeature) {
+      const execution = event.execution.task.execution;
+      const expectedCwd = path.dirname(fixturePath);
+
+      const matched = Boolean(
+        execution &&
+        execution.process === runtime &&
+        Array.isArray(execution.args) &&
+        execution.args.length === 1 &&
+        path.resolve(execution.args[0]) ===
+          path.resolve(fixturePath) &&
+        execution.options &&
+        path.resolve(execution.options.cwd) ===
+          path.resolve(expectedCwd)
+      );
+
+      result.ci002RunInvocationMatched = matched;
+
+      if (!matched) {
+        await finish(
+          "fail",
+          "CI002 task executable, arguments or cwd mismatch"
+        );
+        disposable.dispose();
+        return;
+      }
     }
 
     result.taskProcessExitCode = event.exitCode;
