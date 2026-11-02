@@ -114,7 +114,7 @@
       "patterns": [
         {
           "name": "variable.language.protos",
-          "match": "(?<![.\\p{L}\\p{M}\\p{N}_])(?:this|context|args)(?![\\p{L}\\p{M}\\p{N}_])"
+          "match": "(?<![.\\p{L}\\p{M}\\p{N}_])(?:this|context)(?![\\p{L}\\p{M}\\p{N}_])"
         },
         {
           "name": "keyword.control.protos",

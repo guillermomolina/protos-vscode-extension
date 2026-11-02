@@ -12,7 +12,7 @@ PACKAGE = ROOT / "package.json"
 LOCK = ROOT / "package-lock.json"
 BUNDLE = ROOT / "dist" / "extension.js"
 GITIGNORE = REPO / ".gitignore"
-EXPECTED_EXTENSION_VERSION = "0.2.2"
+EXPECTED_EXTENSION_VERSION = "0.2.3"
 
 EXPECTED_DEPENDENCIES = {
     "vscode-languageclient": "10.1.1",
@@ -85,6 +85,7 @@ scripts/**
 dist/meta.json
 protos-source.lock.json
 *.vsix
+*.vsix.sha256
 """
 
 def fail(message):
@@ -184,6 +185,7 @@ def main():
     print("PACKAGE_LICENSE=license.txt")
     print("THIRD_PARTY_NOTICES=THIRD_PARTY_NOTICES.txt")
     print("PACKAGE_CONTENT_BOUNDARY=EXPLICIT")
+    print("VSIX_CHECKSUM_EXCLUDED=PASS")
 
 if __name__ == "__main__":
     main()

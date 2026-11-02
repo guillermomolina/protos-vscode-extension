@@ -17,3 +17,4 @@ scripts/**
 dist/meta.json
 protos-source.lock.json
 *.vsix
+*.vsix.sha256

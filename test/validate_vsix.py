@@ -7,7 +7,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_EXTENSION_NAME = "protos"
 EXPECTED_EXTENSION_PUBLISHER = "guillermomolina"
-EXPECTED_EXTENSION_VERSION = "0.2.2"
+EXPECTED_EXTENSION_VERSION = "0.2.3"
 
 EXPECTED_EXTENSION_FILES = {
     "extension/readme.md",
@@ -72,6 +72,22 @@ def main():
             ).read_bytes():
                 fail("packaged THIRD_PARTY_NOTICES.txt differs from package root")
 
+            packaged_grammar_bytes = archive.read(
+                "extension/syntaxes/protos.tmLanguage.json"
+            )
+            source_grammar_bytes = (
+                ROOT / "syntaxes" / "protos.tmLanguage.json"
+            ).read_bytes()
+
+            if packaged_grammar_bytes != source_grammar_bytes:
+                fail("packaged TextMate grammar differs from source")
+
+            packaged_grammar = json.loads(
+                packaged_grammar_bytes.decode("utf-8")
+            )
+            if packaged_grammar.get("scopeName") != "source.protos":
+                fail("packaged TextMate scope changed")
+
             package = json.loads(archive.read("extension/package.json").decode("utf-8"))
             if package.get("name") != EXPECTED_EXTENSION_NAME:
                 fail("packaged extension name changed")
@@ -91,6 +107,7 @@ def main():
     print("EXTENSION_ID=guillermomolina.protos")
     print("EXTENSION_VERSION=" + EXPECTED_EXTENSION_VERSION)
     print("PACKAGE_CONTENT_BOUNDED=YES")
+    print("TEXTMATE_GRAMMAR_BYTE_PARITY=PASS")
     print("LICENSE_PACKAGED=YES")
     print("THIRD_PARTY_NOTICES_PACKAGED=YES")
     print("PRODUCTION_NODE_MODULES_IN_VSIX=NO")

@@ -26,9 +26,10 @@ arguments: args
 current: context
 
 object: {
-    true: "member names after dot remain ordinary"
     nested: { value: false }
 }
+object.true: "member names after dot remain ordinary"
+object.null: null
 
 readReservedMember: object.true
 readNullMember: object.null
@@ -47,8 +48,62 @@ composed: {
 
 /* block comments may span
    logical source newlines */
-customOperatorResult: (1 + 2) @ 3
-customMaximal: left =>? right
 identity: object === object
 lazy: truth && false
 notTruth: !truth
+
+// BUG002: args is an ordinary identifier in every name position.
+args: [1, 2, 3]
+argsIdentity: (args) => args
+argsRest: (...args) => args
+memberArgs: object.args
+
+// Contextual spellings are not reserved words.
+for: (value) => value
+in: "ordinary identifier"
+return: 3
+memberFor: object.for
+memberReturn: object.return
+memberElse: object.else
+
+// Unicode identifiers and ordinary member names.
+café: 42
+unicodeMember: object.λ
+
+// Range and InvertedRange are ordinary Core bindings.
+ascending: Range(0, 4)
+descending: Range(4, 0)
+rangePrototype: Range
+invertedPrototype: InvertedRange
+
+// each and eachStep are ordinary selectors.
+ordinaryEach: args.each(item => { item })
+ordinaryStep: ascending.eachStep(2, i => { i })
+descendingEach: descending.each(i => { i })
+
+// Contextual for: generic, numeric and stepped descending.
+genericFor: for(item in args) { item }
+numericFor: for(i, 0, 4) { i }
+steppedFor: for(i, 4, 0, -2) { i }
+
+// Contextual return is a non-local return, not a keyword.
+withReturn: (value) => {
+    return value
+}
+
+// Existing contextual control forms remain ordinary words.
+conditional: if(truth) { true } else { false }
+whileCheck: while(false) { null }
+postTest: { true } until(true)
+
+// Fixed bitwise spellings.
+bitAndValue: 12 & 10
+bitOrValue: 12 | 10
+bitXorValue: 12 ~ 10
+bitNotValue: ~0
+leftShiftValue: 1 << 8
+rightShiftValue: 16 >> 2
+nestedBitwise: 12 ~ ~10
+
+// These spellings inside strings are never source operators.
+textualSyntax: "for(i in values) { return ~i }"

@@ -27,6 +27,7 @@ async function activate() {
     extensionActivated: false,
     languageId: null,
     runCommandRegistered: false,
+    installedGrammarValidated: false,
     error: null
   };
 
@@ -44,6 +45,45 @@ async function activate() {
 
     await extension.activate();
     result.extensionActivated = extension.isActive;
+
+    const grammarEntries =
+      extension.packageJSON?.contributes?.grammars;
+
+    if (
+      !Array.isArray(grammarEntries) ||
+      grammarEntries.length !== 1 ||
+      grammarEntries[0].language !== "protos" ||
+      grammarEntries[0].scopeName !== "source.protos" ||
+      grammarEntries[0].path !== "./syntaxes/protos.tmLanguage.json"
+    ) {
+      throw new Error("installed TextMate contribution mismatch");
+    }
+
+    const installedGrammarPath = path.join(
+      extension.extensionPath,
+      "syntaxes",
+      "protos.tmLanguage.json"
+    );
+
+    const installedGrammar = JSON.parse(
+      fs.readFileSync(installedGrammarPath, "utf8")
+    );
+
+    const intrinsicRule =
+      installedGrammar.repository?.reserved?.patterns?.find(
+        (rule) => rule.name === "variable.language.protos"
+      );
+
+    if (
+      installedGrammar.scopeName !== "source.protos" ||
+      !intrinsicRule ||
+      !intrinsicRule.match.includes("(?:this|context)") ||
+      intrinsicRule.match.includes("args")
+    ) {
+      throw new Error("installed TextMate intrinsic scope mismatch");
+    }
+
+    result.installedGrammarValidated = true;
 
     const document = await vscode.workspace.openTextDocument(
       vscode.Uri.file(fixturePath)

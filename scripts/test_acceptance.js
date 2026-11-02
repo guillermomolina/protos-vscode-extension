@@ -35,7 +35,7 @@ const VSCODE_VERSION =
   "1.140.0";
 
 const EXTENSION_INSTALL_ID =
-  "guillermomolina.protos@0.2.2";
+  "guillermomolina.protos@0.2.3";
 
 
 function commandText(command, args) {

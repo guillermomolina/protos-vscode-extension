@@ -15,6 +15,7 @@ expected = {
     "extensionActivated": True,
     "languageId": "protos",
     "runCommandRegistered": True,
+    "installedGrammarValidated": True,
 }
 
 for key, value in expected.items():
@@ -29,4 +30,5 @@ print("PACKAGED_EXTENSION_FOUND=YES")
 print("PACKAGED_EXTENSION_ACTIVATED=YES")
 print("PACKAGED_LANGUAGE_ASSOCIATION=PASS")
 print("PACKAGED_RUN_COMMAND_REGISTERED=PASS")
+print("PACKAGED_TEXTMATE_GRAMMAR=PASS")
 print("EXTENSION_DEVELOPMENT_PATH_USED=NO")
