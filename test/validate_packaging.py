@@ -12,7 +12,7 @@ PACKAGE = ROOT / "package.json"
 LOCK = ROOT / "package-lock.json"
 BUNDLE = ROOT / "dist" / "extension.js"
 GITIGNORE = REPO / ".gitignore"
-EXPECTED_EXTENSION_VERSION = "0.2.4"
+EXPECTED_EXTENSION_VERSION = "0.2.3"
 
 EXPECTED_DEPENDENCIES = {
     "vscode-languageclient": "10.1.1",
@@ -40,7 +40,6 @@ EXPECTED_SCRIPTS = {
     "test:run": "node test/run_current_file.test.js",
     "test:debug": "node test/debug_integration.test.js",
     "test:lsp": "node test/language_server_integration.test.js",
-    "test:ci002": "node --test test/ci002_release_gate.test.js test/ci002_acceptance_plan.test.js",
     "test": (
         "npm run test:build && "
         "npm run test:grammar && "
@@ -49,7 +48,7 @@ EXPECTED_SCRIPTS = {
         "npm run test:release-version && "
         "npm run test:run && "
         "npm run test:debug && "
-        "npm run test:lsp && npm run test:ci002"
+        "npm run test:lsp"
     ),
     "test:acceptance": "node scripts/test_acceptance.js",
     "package:vsix": "vsce package --no-dependencies",

@@ -5,6 +5,7 @@ build:
 
 test-repository:
 	npm test
+	node --test test/ci002_release_gate.test.js test/ci002_acceptance_plan.test.js
 
 test-acceptance:
 	npm run test:acceptance
