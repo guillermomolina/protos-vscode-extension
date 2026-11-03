@@ -184,6 +184,13 @@ def main():
         "1 << 8",
         "16 >> 2",
         "12 ~ ~10",
+        "namedClosure(third: 3, first: 1, second: 2)",
+        "namedClosure(third: 3, 1, 2)",
+        "namedClosure(third: 3, ...[1, 2])",
+        "namedReceiver.take(value: 42)",
+        "namedArray: [item: 5]",
+        "groupedArray: [(createdByArray: 5)]",
+        "namedClosure((createdByCall: 1), second: 2)",
     )
     for marker in required_fixture:
         if marker not in fixture:
@@ -211,6 +218,7 @@ def main():
     print("NON_NORMATIVE_BOUNDARY: PASS")
     print("BUG002_RESERVED_SCOPE_GUARD: PASS")
     print("BUG002_CONTEXTUAL_FIXTURES: PASS")
+    print("CI002_D237_LEXICAL_FIXTURES: PASS")
     print("BUG002_OPERATOR_POLICY: BROAD_TEXTMATE_ONLY")
 
 if __name__ == "__main__":

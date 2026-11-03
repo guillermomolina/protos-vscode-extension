@@ -7,6 +7,10 @@ const crypto = require("crypto");
 const yauzl = require("yauzl");
 const yazl = require("yazl");
 
+// yazl encodes DOS timestamps using local Date fields.
+// Canonical VSIX timestamps must be independent of the caller's timezone.
+process.env.TZ = "UTC";
+
 function fail(message) {
   console.error("LM009_I1C_CANONICALIZATION_FAILED: " + message);
   process.exit(2);

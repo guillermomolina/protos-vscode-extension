@@ -14,7 +14,13 @@ const {
 } = require("@vscode/test-electron");
 
 const { classifyLockedRelease } = require("./ci002_release_gate");
-const { BASELINE, FEATURES } = require("./ci002_diagnostics_cases");
+const {
+  BASELINE,
+  FEATURES,
+  NAMED_ARGUMENTS
+} = require("./ci002_diagnostics_cases");
+const SIGNATURE_CASES =
+  require("../test/ci002_named_signature_cases");
 
 const ROOT =
   path.resolve(__dirname, "..");
@@ -284,7 +290,10 @@ function writeScenarioConfig(
       spec.ci002RunFeature === true,
     ci002ExpectedLocalValue:
       spec.ci002ExpectedLocalValue || null,
+    ci002NamedFormatter:
+      spec.ci002NamedFormatter === true,
     cases: spec.ci002Cases || null,
+    signatureCases: spec.ci002SignatureCases || null,
     unsavedSource:
       spec.unsavedSource || null,
     unsavedExpected:
@@ -628,7 +637,15 @@ async function main() {
     process.argv.length === 3 &&
     process.argv[2] === "--ci002-lsp-baseline-only";
 
-  if (process.argv.length !== 2 && !ci002Focal) {
+  const ci002D237Focal =
+    process.argv.length === 3 &&
+    process.argv[2] === "--ci002-d237-only";
+
+  if (
+    process.argv.length !== 2 &&
+    !ci002Focal &&
+    !ci002D237Focal
+  ) {
     throw new Error("Unknown acceptance argument");
   }
 
@@ -656,6 +673,15 @@ async function main() {
       "utf8"
     ))
   );
+
+  if (
+    ci002D237Focal &&
+    !ci002.eligibleForNamedArgumentTests
+  ) {
+    throw new Error(
+      "D237 focal requires an eligible official locked release"
+    );
+  }
 
   console.log(
     "CI002_REQUIRED_RELEASE=" + ci002.requiredRelease
@@ -724,17 +750,19 @@ async function main() {
     ]
   );
 
-  run(
-    "python3",
-    [
-      path.join(
-        ROOT,
-        "test",
-        "validate_reproducibility.py"
-      ),
-      RAW_VSIX
-    ]
-  );
+  if (!ci002D237Focal) {
+    run(
+      "python3",
+      [
+        path.join(
+          ROOT,
+          "test",
+          "validate_reproducibility.py"
+        ),
+        RAW_VSIX
+      ]
+    );
+  }
 
   const canonicalSha =
     sha256File(
@@ -785,17 +813,19 @@ async function main() {
     ]
   );
 
-  run(
-    "python3",
-    [
-      path.join(
-        ROOT,
-        "test",
-        "released_formatter_acceptance.py"
-      ),
-      runtime
-    ]
-  );
+  if (!ci002D237Focal) {
+    run(
+      "python3",
+      [
+        path.join(
+          ROOT,
+          "test",
+          "released_formatter_acceptance.py"
+        ),
+        runtime
+      ]
+    );
+  }
 
   process.chdir(ROOT);
 
@@ -1020,14 +1050,128 @@ async function main() {
     });
   }
 
+  if (ci002.eligibleForNamedArgumentTests) {
+    scenarios.push({
+      name: "ci002-named-diagnostics",
+      heading: "CI002 D237 REAL LSP DIAGNOSTICS",
+      makeHarness: "formatting_harness_make_vsix.py",
+      validator: "ci002_diagnostics_validate.py",
+      configPath: "/tmp/protos-vscode-lm011-d2.json",
+      fixtureName: "named-diagnostics.protos",
+      fixture: "value: 1\\n",
+      timeoutMilliseconds: 180000,
+      runtimeKind: "locked-runtime",
+      formattingMode: "ci002-diagnostics",
+      ci002Kind: "named-arguments",
+      ci002Cases: NAMED_ARGUMENTS
+    });
+
+    scenarios.push({
+      name: "ci002-named-signatures",
+      heading: "CI002 D237 REAL SIGNATURE HELP",
+      makeHarness: "formatting_harness_make_vsix.py",
+      validator: "ci002_named_signature_validate.py",
+      configPath: "/tmp/protos-vscode-lm011-d2.json",
+      fixtureName: "named-signatures.protos",
+      fixture: "value: 1\\n",
+      timeoutMilliseconds: 240000,
+      runtimeKind: "locked-runtime",
+      formattingMode: "ci002-signatures",
+      ci002SignatureCases: SIGNATURE_CASES
+    });
+
+    scenarios.push({
+      name: "ci002-named-format",
+      heading: "CI002 D237 REAL NAMED FORMATTING",
+      makeHarness: "formatting_harness_make_vsix.py",
+      validator: "ci002_named_format_validate.py",
+      configPath: "/tmp/protos-vscode-lm011-d2.json",
+      fixtureName: "named-format.protos",
+      fixture: "diskValue: 9\n",
+      timeoutMilliseconds: 180000,
+      runtimeKind: "locked-runtime",
+      formattingMode: "real",
+      ci002NamedFormatter: true,
+      unsavedSource:
+        "f: (a, b, c) => a\n" +
+        "result: f(c:3,1,2)",
+      unsavedExpected:
+        "f: (a, b, c) => a\n" +
+        "result: f(c: 3, 1, 2)\n",
+      saveSource:
+        "identity: (value) => value\n" +
+        "fromCall: identity((created:41))\n" +
+        "arrayNamed: [item:5]\n" +
+        "arrayGrouped: [(createdByArray:6)]",
+      saveExpected:
+        "identity: (value) => value\n" +
+        "fromCall: identity((created: 41))\n" +
+        "arrayNamed: [item: 5]\n" +
+        "arrayGrouped: [(createdByArray: 6)]\n"
+    });
+
+    scenarios.push({
+      name: "ci002-named-run",
+      heading: "CI002 D237 REAL NAMED EXECUTION",
+      makeHarness: "clean_run_make_vsix.py",
+      validator: "ci002_run_validate.py",
+      configPath: "/tmp/protos-vscode-i3b.json",
+      fixtureName: "ci002-named-run.protos",
+      fixture: fs.readFileSync(
+        path.join(
+          ROOT,
+          "test",
+          "fixtures",
+          "ci002_named_run_features.protos"
+        ),
+        "utf8"
+      ),
+      timeoutMilliseconds: 120000,
+      runtimeKind: "locked-runtime",
+      ci002RunFeature: true
+    });
+
+    scenarios.push({
+      name: "ci002-named-debug",
+      heading: "CI002 D237 REAL NAMED DEBUG",
+      makeHarness: "debug_harness_make_vsix.py",
+      validator: "debug_harness_validate.py",
+      configPath: "/tmp/protos-vscode-i3c.json",
+      fixtureName: "ci002-named-debug.protos",
+      fixture:
+        "x: ((a, b, c) => a * 100 + b * 10 + c)(c: 3, 1, 2)\n" +
+        "print(x)\n" +
+        'print("done")\n',
+      timeoutMilliseconds: 120000,
+      runtimeKind: "locked-runtime",
+      ci002ExpectedLocalValue: "123"
+    });
+  }
+
   const selectedScenarios = ci002Focal
     ? scenarios.filter(
-        (spec) => spec.name === "ci002-lsp-baseline"
+        spec => spec.name === "ci002-lsp-baseline"
       )
-    : scenarios;
+    : ci002D237Focal
+      ? scenarios.filter(
+          spec => spec.name.startsWith("ci002-named-")
+        )
+      : scenarios;
 
   if (ci002Focal && selectedScenarios.length !== 1) {
     throw new Error("CI002 focal scenario is missing");
+  }
+
+  if (
+    ci002D237Focal &&
+    (
+      selectedScenarios.length !== 5 ||
+      !ci002.eligibleForNamedArgumentTests
+    )
+  ) {
+    throw new Error(
+      "CI002 D237 focal selection must contain five eligible scenarios"
+    );
   }
 
   const requiredCi002Scenarios = [
@@ -1037,7 +1181,11 @@ async function main() {
     "ci002-debug-features"
   ];
 
-  if (!ci002Focal && ci002.eligibleForFeatureTests) {
+  if (
+    !ci002Focal &&
+    !ci002D237Focal &&
+    ci002.eligibleForFeatureTests
+  ) {
     const registered = new Set(
       scenarios.map((scenario) => scenario.name)
     );
@@ -1047,6 +1195,26 @@ async function main() {
         throw new Error(
           "CI002 missing required scenario: " + name
         );
+      }
+    }
+  }
+
+  const requiredNamedScenarios = [
+    "ci002-named-diagnostics",
+    "ci002-named-signatures",
+    "ci002-named-format",
+    "ci002-named-run",
+    "ci002-named-debug"
+  ];
+
+  if (!ci002Focal && ci002.eligibleForNamedArgumentTests) {
+    const registered = new Set(
+      scenarios.map(scenario => scenario.name)
+    );
+
+    for (const name of requiredNamedScenarios) {
+      if (!registered.has(name)) {
+        throw new Error("CI002 missing D237 scenario: " + name);
       }
     }
   }
@@ -1064,7 +1232,11 @@ async function main() {
     );
   }
 
-  if (!ci002Focal && ci002.eligibleForFeatureTests) {
+  if (
+    !ci002Focal &&
+    !ci002D237Focal &&
+    ci002.eligibleForFeatureTests
+  ) {
     const completed = new Set(
       scenarioResults.map((row) => row.name)
     );
@@ -1078,17 +1250,53 @@ async function main() {
     }
   }
 
+  const namedCompleted = new Set(
+    scenarioResults.map(row => row.name)
+  );
+
+  if (!ci002Focal && ci002.eligibleForNamedArgumentTests) {
+    for (const name of requiredNamedScenarios) {
+      if (!namedCompleted.has(name)) {
+        throw new Error(
+          "CI002 D237 scenario not completed: " + name
+        );
+      }
+    }
+  }
+
+  const namedScenarioStatus = name =>
+    !ci002.eligibleForNamedArgumentTests
+      ? "BLOCKED_RELEASE"
+      : ci002Focal
+        ? "NOT_RUN"
+        : namedCompleted.has(name)
+          ? "PASS"
+          : "NOT_RUN";
+
+  const namedFinalStatus =
+    !ci002.eligibleForNamedArgumentTests
+      ? "BLOCKED_RELEASE"
+      : ci002Focal
+        ? "NOT_RUN"
+        : requiredNamedScenarios.every(
+            name => scenarioResults.some(
+              row => row.name === name && row.status === "PASS"
+            )
+          )
+          ? "PASS"
+          : "NOT_RUN";
+
   const ci002FinalStatus =
     !ci002.eligibleForFeatureTests
       ? "BLOCKED_RELEASE"
-      : ci002Focal
+      : ci002Focal || ci002D237Focal
         ? "NOT_RUN"
         : "PASS";
 
   const featureSurfaceStatus =
     !ci002.eligibleForFeatureTests
       ? "BLOCKED_RELEASE"
-      : ci002Focal
+      : ci002Focal || ci002D237Focal
         ? "NOT_RUN"
         : "PASS";
 
@@ -1103,7 +1311,8 @@ async function main() {
       scenarioResults,
       baselineScenarios: scenarioResults
         .filter((scenario) =>
-          !scenario.name.endsWith("-features")
+          !scenario.name.endsWith("-features") &&
+          !scenario.name.startsWith("ci002-named-")
         )
         .map((scenario) => scenario.name),
       featureScenarios: scenarioResults
@@ -1111,8 +1320,17 @@ async function main() {
           scenario.name.endsWith("-features")
         )
         .map((scenario) => scenario.name),
-      baselineStatus: ci002Focal ? "NOT_RUN" : "PASS",
-      lspDiagnosticsBaseline: "PASS",
+      namedArgumentScenarios: scenarioResults
+        .filter(scenario =>
+          scenario.name.startsWith("ci002-named-")
+        )
+        .map(scenario => scenario.name),
+      baselineStatus:
+        ci002Focal || ci002D237Focal
+          ? "NOT_RUN"
+          : "PASS",
+      lspDiagnosticsBaseline:
+        ci002D237Focal ? "NOT_RUN" : "PASS",
       lspDiagnosticsFeatures:
         featureSurfaceStatus,
       runFeatureAcceptance:
@@ -1121,7 +1339,24 @@ async function main() {
         featureSurfaceStatus,
       debugFeatureAcceptance:
         featureSurfaceStatus,
+      lspNamedArgumentDiagnostics:
+        namedScenarioStatus("ci002-named-diagnostics"),
+      namedSignatureHelpAcceptance:
+        namedScenarioStatus("ci002-named-signatures"),
+      namedFormatterAcceptance:
+        namedScenarioStatus("ci002-named-format"),
+      namedRunAcceptance:
+        namedScenarioStatus("ci002-named-run"),
+      namedDebugAcceptance:
+        namedScenarioStatus("ci002-named-debug"),
       ...ci002,
+      finalNamedArgumentAcceptance: namedFinalStatus,
+      namedArgumentFeatures: ci002.namedArgumentFeatures.map(
+        feature => ({
+          ...feature,
+          status: namedFinalStatus
+        })
+      ),
       finalFeatureAcceptance: ci002FinalStatus,
       features: ci002.features.map((feature) => ({
         ...feature,
@@ -1135,6 +1370,10 @@ async function main() {
     ci002FinalStatus
   );
   console.log(
+    "CI002_D237_ACCEPTANCE=" +
+    namedFinalStatus
+  );
+  console.log(
     "CI002_EVIDENCE=" +
     path.join(ACCEPTANCE_ROOT, "ci002-evidence.json")
   );
@@ -1144,7 +1383,7 @@ async function main() {
   );
 
   console.log(
-    ci002Focal
+    ci002Focal || ci002D237Focal
       ? "PROTOS_VSCODE_ACCEPTANCE_TEST=FOCAL_PASS"
       : "PROTOS_VSCODE_ACCEPTANCE_TEST=PASS"
   );

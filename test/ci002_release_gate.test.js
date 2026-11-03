@@ -8,6 +8,8 @@ const path = require("node:path");
 const {
   REQUIRED_RELEASE,
   FEATURE_IDS,
+  NAMED_ARGUMENTS_REQUIRED_RELEASE,
+  NAMED_ARGUMENT_FEATURE_IDS,
   compareVersions,
   classifyLockedRelease
 } = require("../scripts/ci002_release_gate");
@@ -134,6 +136,55 @@ test(
 );
 
 test(
+  "D237 requires 0.3.440 independently of the original gate",
+  () => {
+    assert.equal(
+      NAMED_ARGUMENTS_REQUIRED_RELEASE,
+      "0.3.440"
+    );
+
+    for (const version of [
+      "0.3.237",
+      "0.3.436",
+      "0.3.439"
+    ]) {
+      const gate = classifyLockedRelease(fixture(version));
+
+      assert.equal(gate.eligibleForNamedArgumentTests, false);
+      assert.equal(
+        gate.finalNamedArgumentAcceptance,
+        "BLOCKED_RELEASE"
+      );
+      assert.equal(
+        gate.namedArgumentFeatures.length,
+        NAMED_ARGUMENT_FEATURE_IDS.length
+      );
+      assert.ok(gate.namedArgumentFeatures.every(
+        row => row.status === "BLOCKED_RELEASE"
+      ));
+    }
+
+    const previous = classifyLockedRelease(fixture("0.3.439"));
+    assert.equal(previous.eligibleForFeatureTests, true);
+    assert.equal(previous.eligibleForNamedArgumentTests, false);
+
+    for (const version of [
+      "0.3.440",
+      "0.3.442",
+      "0.4.0"
+    ]) {
+      const gate = classifyLockedRelease(fixture(version));
+
+      assert.equal(gate.eligibleForNamedArgumentTests, true);
+      assert.equal(gate.finalNamedArgumentAcceptance, "NOT_RUN");
+      assert.ok(gate.namedArgumentFeatures.every(
+        row => row.status === "NOT_RUN"
+      ));
+    }
+  }
+);
+
+test(
   "tampered release identities are rejected",
   () => {
     const original = fixture("0.3.436");
@@ -192,6 +243,10 @@ test(
     );
     assert.notEqual(
       gate.finalFeatureAcceptance,
+      "PASS"
+    );
+    assert.notEqual(
+      gate.finalNamedArgumentAcceptance,
       "PASS"
     );
   }

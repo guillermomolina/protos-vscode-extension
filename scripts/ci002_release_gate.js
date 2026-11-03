@@ -18,6 +18,18 @@ const FEATURE_IDS = Object.freeze([
   "range-and-inverted-range"
 ]);
 
+const NAMED_ARGUMENTS_REQUIRED_RELEASE = "0.3.440";
+
+const NAMED_ARGUMENT_FEATURE_IDS = Object.freeze([
+  "named-mixed-binding",
+  "named-grouped-slot-creation",
+  "named-array-disambiguation",
+  "named-diagnostics",
+  "named-formatter",
+  "named-signature-help",
+  "named-run-and-debug"
+]);
+
 function numericVersion(version) {
   const pattern =
     /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -135,6 +147,15 @@ function classifyLockedRelease(lock) {
   const status =
     eligible ? "NOT_RUN" : "BLOCKED_RELEASE";
 
+  const namedEligible =
+    compareVersions(
+      lock.release_version,
+      NAMED_ARGUMENTS_REQUIRED_RELEASE
+    ) >= 0;
+
+  const namedStatus =
+    namedEligible ? "NOT_RUN" : "BLOCKED_RELEASE";
+
   return {
     requiredRelease: REQUIRED_RELEASE,
     lockedRelease: lock.release_version,
@@ -144,9 +165,15 @@ function classifyLockedRelease(lock) {
     lockedAssetSha256:
       lock.release_asset_sha256,
     eligibleForFeatureTests: eligible,
+    eligibleForNamedArgumentTests: namedEligible,
+    namedArgumentsRequiredRelease: NAMED_ARGUMENTS_REQUIRED_RELEASE,
     finalFeatureAcceptance: status,
+    finalNamedArgumentAcceptance: namedStatus,
     features: FEATURE_IDS.map(
       (id) => ({ id, status })
+    ),
+    namedArgumentFeatures: NAMED_ARGUMENT_FEATURE_IDS.map(
+      (id) => ({ id, status: namedStatus })
     )
   };
 }
@@ -154,6 +181,8 @@ function classifyLockedRelease(lock) {
 module.exports = {
   REQUIRED_RELEASE,
   FEATURE_IDS,
+  NAMED_ARGUMENTS_REQUIRED_RELEASE,
+  NAMED_ARGUMENT_FEATURE_IDS,
   compareVersions,
   classifyLockedRelease
 };

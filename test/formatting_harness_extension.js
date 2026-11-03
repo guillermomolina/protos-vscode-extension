@@ -175,12 +175,16 @@ async function activateReal(config) {
 
     formatDocumentCommandCompleted: false,
     formatDocumentResultExact: false,
+    namedIdempotentFormatDocument: false,
     unsavedBufferFormatting: false,
     diskUnchangedDuringUnsavedFormatting: false,
 
     formatOnSaveEnabled: false,
     formatOnSaveResultExact: false,
     diskContentCanonicalAfterSave: false,
+    namedIdempotentFormatOnSave: false,
+    namedLabelsPreserved: false,
+    ci002NamedFormatter: config.ci002NamedFormatter === true,
 
     extensionDevelopmentPathUsed: false,
     testServerUsed: false,
@@ -326,6 +330,25 @@ async function activateReal(config) {
       document.getText() ===
       unsavedExpected;
 
+    if (config.ci002NamedFormatter) {
+      const firstPass = document.getText();
+
+      await vscode.commands.executeCommand(
+        "editor.action.formatDocument"
+      );
+
+      result.namedIdempotentFormatDocument =
+        document.getText() === firstPass &&
+        document.isDirty &&
+        fs.readFileSync(fixturePath, "utf8") === diskBeforeUnsaved;
+
+      if (!result.namedIdempotentFormatDocument) {
+        throw new Error(
+          "D237 Format Document is not idempotent"
+        );
+      }
+    }
+
     result.diskUnchangedDuringUnsavedFormatting =
       fs.readFileSync(
         fixturePath,
@@ -422,6 +445,36 @@ async function activateReal(config) {
         fixturePath,
         "utf8"
       ) === saveExpected;
+
+    if (config.ci002NamedFormatter) {
+      const savedCanonical = document.getText();
+
+      await vscode.commands.executeCommand(
+        "editor.action.formatDocument"
+      );
+
+      result.namedIdempotentFormatOnSave =
+        document.getText() === savedCanonical &&
+        !document.isDirty &&
+        fs.readFileSync(fixturePath, "utf8") === savedCanonical;
+
+      result.namedLabelsPreserved =
+        unsavedExpected.includes("f(c: 3, 1, 2)") &&
+        [
+          "identity((created: 41))",
+          "[item: 5]",
+          "[(createdByArray: 6)]"
+        ].every(marker => savedCanonical.includes(marker));
+
+      if (
+        !result.namedIdempotentFormatOnSave ||
+        !result.namedLabelsPreserved
+      ) {
+        throw new Error(
+          "D237 formatter idempotence or label preservation failed"
+        );
+      }
+    }
 
     if (!result.extensionActivated) {
       throw new Error(
@@ -521,10 +574,50 @@ async function activateCi002Diagnostics(config) {
 
         const before = events;
         await replaceDocumentText(editor, c.invalid);
-        await waitFor(
-          () => events > before && errors().length > 0,
-          c.id + " parser error"
-        );
+        let observedRanges = [];
+
+        try {
+          await waitFor(
+            () => {
+              if (events <= before) {
+                return false;
+              }
+
+              const current = errors();
+
+              observedRanges = current.map(d => {
+                const r = d.range;
+                return [
+                  r.start.line,
+                  r.start.character,
+                  r.end.line,
+                  r.end.character
+                ];
+              });
+
+              if (current.length !== 1) {
+                return false;
+              }
+
+              return !c.range ||
+                JSON.stringify(observedRanges[0]) ===
+                  JSON.stringify(c.range);
+            },
+            c.id + " expected parser diagnostic"
+          );
+        } catch (error) {
+          throw new Error(
+            c.id + ": expected diagnostic " +
+            JSON.stringify(c.range) +
+            ", last observed " +
+            JSON.stringify(observedRanges) +
+            ", diagnostic events=" +
+            String(events - before) +
+            ", document version=" +
+            String(doc.version) +
+            "; " + String(error.message)
+          );
+        }
 
         if (errors().length !== 1) {
           throw new Error(c.id + ": expected one parser error");
@@ -543,13 +636,54 @@ async function activateCi002Diagnostics(config) {
 
         const beforeRepair = events;
         await replaceDocumentText(editor, c.valid);
-        await waitFor(
-          () => events > beforeRepair &&
-            vscode.languages.getDiagnostics(doc.uri).length === 0,
-          c.id + " diagnostic recovery"
-        );
 
-        result.cases.push({ id: c.id, status: "PASS", range: actual });
+        const repairVersion = doc.version;
+
+        const diagnosticSnapshot = () =>
+          vscode.languages.getDiagnostics(doc.uri).map(d => ({
+            source: d.source,
+            severity: d.severity,
+            code: d.code,
+            message: d.message,
+            range: [
+              d.range.start.line,
+              d.range.start.character,
+              d.range.end.line,
+              d.range.end.character
+            ]
+          }));
+
+        try {
+          await waitFor(
+            () =>
+              events > beforeRepair &&
+              errors().length === 0,
+            c.id + " parser-error recovery"
+          );
+        } catch (error) {
+          throw new Error(
+            c.id + ": parser recovery failed; " +
+            JSON.stringify({
+              eventsBeforeRepair: beforeRepair,
+              eventsNow: events,
+              documentVersion: doc.version,
+              repairVersion,
+              textMatchesValid: doc.getText() === c.valid,
+              diagnostics: diagnosticSnapshot()
+            }),
+            { cause: error }
+          );
+        }
+
+        if (doc.getText() !== c.valid) {
+          throw new Error(c.id + ": repaired buffer differs");
+        }
+
+        result.cases.push({
+          id: c.id,
+          status: "PASS",
+          range: actual
+        });
       }
     } finally {
       listener.dispose();
@@ -571,9 +705,202 @@ async function activateCi002Diagnostics(config) {
 }
 
 
+
+async function activateCi002NamedSignatures(config) {
+  const result = {
+    status: "running",
+    kind: "named-signatures",
+    realRuntime: true,
+    cases: [],
+    error: null
+  };
+
+  try {
+    if (
+      !config.runtime ||
+      !fs.existsSync(config.runtime) ||
+      !Array.isArray(config.signatureCases) ||
+      config.signatureCases.length === 0
+    ) {
+      throw new Error("Invalid D237 Signature Help configuration");
+    }
+
+    await vscode.workspace.getConfiguration("protos").update(
+      "runtime.executable",
+      config.runtime,
+      vscode.ConfigurationTarget.Global
+    );
+
+    const doc = await vscode.workspace.openTextDocument(
+      vscode.Uri.file(config.fixturePath)
+    );
+    const editor = await vscode.window.showTextDocument(doc);
+    const ext = vscode.extensions.getExtension("guillermomolina.protos");
+
+    if (!ext || doc.languageId !== "protos") {
+      throw new Error("Installed Protos VSIX unavailable");
+    }
+
+    await ext.activate();
+
+    if (!ext.isActive) {
+      throw new Error("Installed Protos VSIX did not activate");
+    }
+
+    for (const c of config.signatureCases) {
+      const marker = c.source.indexOf("|");
+
+      if (
+        marker < 0 ||
+        c.source.indexOf("|", marker + 1) >= 0
+      ) {
+        throw new Error(c.id + ": expected one cursor marker");
+      }
+
+      const source =
+        c.source.slice(0, marker) +
+        c.source.slice(marker + 1);
+
+      const desiredEol = source.includes("\r\n")
+        ? vscode.EndOfLine.CRLF
+        : vscode.EndOfLine.LF;
+
+      if (doc.eol !== desiredEol) {
+        const eolApplied = await editor.edit(
+          builder => builder.setEndOfLine(desiredEol)
+        );
+
+        if (!eolApplied || doc.eol !== desiredEol) {
+          throw new Error(
+            c.id + ": failed to configure document EOL"
+          );
+        }
+      }
+
+      await replaceDocumentText(editor, source);
+
+      if (
+        doc.getText() !== source ||
+        doc.eol !== desiredEol
+      ) {
+        throw new Error(
+          c.id + ": buffer text/EOL mismatch; " +
+          JSON.stringify({
+            expectedEol: desiredEol,
+            actualEol: doc.eol,
+            expectedLength: source.length,
+            actualLength: doc.getText().length,
+            sameNormalizedText:
+              doc.getText().replace(/\r\n/g, "\n") ===
+              source.replace(/\r\n/g, "\n")
+          })
+        );
+      }
+
+      const version = doc.version;
+      const position = doc.positionAt(marker);
+      const coordinates = [position.line, position.character];
+
+      if (
+        c.expectedPosition &&
+        JSON.stringify(coordinates) !==
+          JSON.stringify(c.expectedPosition)
+      ) {
+        throw new Error(
+          c.id + ": UTF-16 position mismatch: " +
+          JSON.stringify(coordinates)
+        );
+      }
+
+      let accepted = null;
+
+      await waitFor(
+        async () => {
+          if (
+            doc.version !== version ||
+            doc.getText() !== source
+          ) {
+            throw new Error(c.id + ": document changed during request");
+          }
+
+          let help;
+
+          try {
+            help = await vscode.commands.executeCommand(
+              "vscode.executeSignatureHelpProvider",
+              doc.uri,
+              position
+            );
+          } catch (_) {
+            return false;
+          }
+
+          if (
+            !help ||
+            !Array.isArray(help.signatures) ||
+            help.signatures.length !== 1
+          ) {
+            return false;
+          }
+
+          const signature =
+            help.signatures[help.activeSignature || 0];
+
+          if (
+            !signature ||
+            signature.label !== c.expectedLabel ||
+            help.activeParameter !== c.expectedActiveParameter
+          ) {
+            return false;
+          }
+
+          accepted = {
+            id: c.id,
+            status: "PASS",
+            signatureLabel: signature.label,
+            activeParameter: help.activeParameter,
+            position: coordinates,
+            documentVersion: version
+          };
+
+          return true;
+        },
+        c.id + " real named Signature Help",
+        60000
+      );
+
+      result.cases.push(accepted);
+    }
+
+    result.status = "pass";
+  } catch (error) {
+    result.status = "fail";
+    result.error = String(error.stack || error);
+  }
+
+  fs.mkdirSync(
+    path.dirname(config.resultPath),
+    { recursive: true }
+  );
+  fs.writeFileSync(
+    config.resultPath,
+    JSON.stringify(result, null, 2) + "\n"
+  );
+
+  if (result.status !== "pass") {
+    throw new Error(result.error);
+  }
+}
+
+
 async function activate() {
   const config =
     loadHarnessConfig();
+
+  if (config.mode === "ci002-signatures") {
+    await activateCi002NamedSignatures(config);
+    return;
+  }
 
   if (config.mode === "ci002-diagnostics") {
     await activateCi002Diagnostics(config);

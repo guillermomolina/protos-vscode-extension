@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import hashlib
+import os
 import subprocess
 import sys
 import tempfile
@@ -56,7 +57,17 @@ with tempfile.TemporaryDirectory(prefix="lm009-i1c-") as temporary:
     first = Path(temporary) / "canonical-a.vsix"
     second = Path(temporary) / "canonical-b.vsix"
 
-    for destination in (first, second):
+    timezone_outputs = [
+        (first, "UTC"),
+        (second, "UTC"),
+        (Path(temporary) / "canonical-madrid.vsix", "Europe/Madrid"),
+        (Path(temporary) / "canonical-los-angeles.vsix", "America/Los_Angeles"),
+    ]
+
+    for destination, timezone in timezone_outputs:
+        environment = os.environ.copy()
+        environment["TZ"] = timezone
+
         subprocess.check_call(
             [
                 "node",
@@ -64,7 +75,8 @@ with tempfile.TemporaryDirectory(prefix="lm009-i1c-") as temporary:
                 str(raw),
                 str(destination),
                 str(source_epoch),
-            ]
+            ],
+            env=environment,
         )
 
     raw_members, _ = member_map(raw)
@@ -80,9 +92,16 @@ with tempfile.TemporaryDirectory(prefix="lm009-i1c-") as temporary:
     if sha256(first) != sha256(second):
         fail("canonical artifact SHA-256 differs")
 
+    if any(
+        sha256(destination) != sha256(first)
+        for destination, _ in timezone_outputs
+    ):
+        fail("canonical artifact SHA-256 depends on timezone")
+
     print("LM009_I1C_REPRODUCIBILITY_VALIDATION=PASS")
     print("VSIX_CONTENT_REPRODUCIBLE=YES")
     print("VSIX_ARTIFACT_REPRODUCIBLE=YES")
+    print("VSIX_CANONICAL_TIMEZONE_PARITY=PASS")
     print("VSIX_CANONICAL_TIMESTAMP_SOURCE=SOURCE_DATE_EPOCH_FROM_GIT_COMMIT")
     print("VSIX_CANONICAL_COMPRESSION=STORE")
     print("VSIX_CANONICAL_ORDER=LEXICOGRAPHIC")

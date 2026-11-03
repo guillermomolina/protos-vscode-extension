@@ -20,8 +20,8 @@
     },
     {
       "name": "objects-closures-trailing-closure",
-      "source": "object:{...base;name:\"Rex\"}\ndog:animal{name:\"Rex\"\nage:2}\nbare:x=>x+1\nparen:(y)=>y*2\nmulti:(a,b=2,...rest)=>{result:a+b\n^result}\nrun(1){first\nsecond}\nnoop:()=>{}\nmapping:%{\"a\":1\n\"b\":2}",
-      "expected": "object: { ...base; name: \"Rex\" }\ndog: animal {\n    name: \"Rex\"\n    age: 2\n}\nbare: x => x + 1\nparen: (y) => y * 2\nmulti: (a, b = 2, ...rest) => {\n    result: a + b\n    ^result\n}\nrun(1) {\n    first\n    second\n}\nnoop: () => {}\nmapping: %{\n    \"a\": 1\n    \"b\": 2\n}\n",
+      "source": "object:{...base;name:\"Rex\"}\ndog:animal{name:\"Rex\"\nage:2}\nbare:x=>x+1\nparen:(y)=>y*2\nmulti:(a,b:2,...rest)=>{result:a+b\n^result}\nrun(1){first\nsecond}\nnoop:()=>{}\nmapping:%{\"a\":1\n\"b\":2}",
+      "expected": "object: { ...base; name: \"Rex\" }\ndog: animal {\n    name: \"Rex\"\n    age: 2\n}\nbare: x => x + 1\nparen: (y) => y * 2\nmulti: (a, b: 2, ...rest) => {\n    result: a + b\n    ^result\n}\nrun(1) {\n    first\n    second\n}\nnoop: () => {}\nmapping: %{\n    \"a\": 1\n    \"b\": 2\n}\n",
       "preserve": [
         "x =>",
         "(y) =>",

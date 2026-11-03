@@ -105,5 +105,19 @@ leftShiftValue: 1 << 8
 rightShiftValue: 16 >> 2
 nestedBitwise: 12 ~ ~10
 
+// D237: named arguments are ordinary contextual call syntax.
+namedClosure: (first, second: 2, third: 3) => [first, second, third]
+namedReordered: namedClosure(third: 3, first: 1, second: 2)
+namedMixed: namedClosure(third: 3, 1, 2)
+namedSpread: namedClosure(third: 3, ...[1, 2])
+
+namedReceiver: { take: (value) => value }
+namedMemberCall: namedReceiver.take(value: 42)
+
+// Both bracket forms parse; their runtime meanings differ.
+namedArray: [item: 5]
+groupedArray: [(createdByArray: 5)]
+groupedCall: namedClosure((createdByCall: 1), second: 2)
+
 // These spellings inside strings are never source operators.
 textualSyntax: "for(i in values) { return ~i }"

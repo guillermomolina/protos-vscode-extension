@@ -18,10 +18,10 @@ The exact published runtime identity is recorded in
 
 ```text
 repository      = guillermomolina/protos
-source revision = f627734c8feaf3c26c4a32903b6ea0e25f4a9956
-release tag     = v0.3.237
-release asset   = protos-0.3.237-native-linux-x86_64.zip
-asset sha256    = 510537c7c47a323ed05a5ea8e4e46bc3cd63c761a58e68cb0639548feb8cc46c
+source revision = b20271369d00f8937890a4a94048bb1754b688b8
+release tag     = v0.3.442
+release asset   = protos-0.3.442-native-linux-x86_64.zip
+asset sha256    = e3aea0bc715a0351cf09d5fe3a52471d444ab17b80924cc7630bf96f2a289380
 graalvm release = 25.4.4.1.1
 ```
 
@@ -53,7 +53,7 @@ Those responsibilities remain in the canonical Protos repository.
 extension id:    guillermomolina.protos
 extension name:  protos
 publisher:       guillermomolina
-extension ver.:  0.2.3
+extension ver.:  0.2.4
 engines.vscode:  ^1.104.0
 language id:     protos
 file extension:  .protos

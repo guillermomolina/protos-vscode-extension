@@ -62,4 +62,28 @@ const FEATURES = [
   }
 ];
 
-module.exports = { BASELINE, FEATURES };
+const NAMED_ARGUMENTS = [
+  {
+    id: "named-duplicate-explicit-label",
+    invalid:
+      "f: (a, b) => a\n" +
+      "f(a: 1, a: 2)\n",
+    valid:
+      "f: (a, b) => a\n" +
+      "f(b: 2, a: 1)\n" +
+      "f(b: 2, 1)\n" +
+      "f(b: 2, ...[1])\n"
+  },
+  {
+    id: "named-duplicate-array-label",
+    invalid:
+      "Array: (item) => item\n" +
+      "[item: 1, item: 2]\n",
+    valid:
+      "Array: (item) => item\n" +
+      "named: [item: 5]\n" +
+      "grouped: [(createdByArray: 7)]\n"
+  }
+];
+
+module.exports = { BASELINE, FEATURES, NAMED_ARGUMENTS };

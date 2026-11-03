@@ -21,6 +21,10 @@ expected = {
         "contextual-return-and-caret",
         "range-and-inverted-range",
     },
+    "named-arguments": {
+        "named-duplicate-explicit-label",
+        "named-duplicate-array-label",
+    },
 }
 
 kind = data.get("kind")

@@ -1,0 +1,57 @@
+// CI002 D237: installed-VSIX execution assertions.
+// Canonical semantics belong to guillermomolina/protos.
+
+Assertions: import("std:test/Assertions")
+
+triple: (first, second, third: 30) => [first, second, third]
+
+reordered: triple(third: 3, first: 1, second: 2)
+Assertions.require(
+    reordered[0] == 1 &&
+    reordered[1] == 2 &&
+    reordered[2] == 3
+)
+
+mixed: triple(third: 3, 1, 2)
+Assertions.require(
+    mixed[0] == 1 &&
+    mixed[1] == 2 &&
+    mixed[2] == 3
+)
+
+spread: triple(third: 3, ...[1, 2])
+Assertions.require(
+    spread[0] == 1 &&
+    spread[1] == 2 &&
+    spread[2] == 3
+)
+
+defaults: (first: 10, second: 20) => [first, second]
+omitted: defaults(second: 7)
+suppliedNull: defaults(first: null)
+
+Assertions.require(
+    omitted[0] == 10 &&
+    omitted[1] == 7
+)
+
+Assertions.require(
+    suppliedNull[0] === null &&
+    suppliedNull[1] == 20
+)
+
+identity: (value) => value
+fromCall: identity((createdByCall: 41))
+
+Assertions.require(fromCall == 41)
+Assertions.require(createdByCall == 41)
+
+fromArray: [(createdByArray: 42)]
+
+Assertions.require(fromArray[0] == 42)
+Assertions.require(createdByArray == 42)
+
+Assertions.signals(Error, () => { [item: 5] })
+Assertions.signals(Error, () => { triple(unknown: 9) })
+
+print("CI002_D237_EXECUTION_ASSERTIONS_COMPLETED")
